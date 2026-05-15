@@ -93,6 +93,14 @@ void loop() {
       digitalWrite(RELAY_PIN, LOW);
     } else if (command == "RESET_FLOW") {
       totalLitres = 0.0;
+    } else if (command == "TRIGGER_SOS") {
+      if (!emergencyMode && !isTampered) {
+        emergencyMode = true;
+        waterLimit = totalLitres + EMERGENCY_LIMIT;
+        valveState = true;
+        digitalWrite(RELAY_PIN, LOW);
+        digitalWrite(EMERGENCY_LED_PIN, HIGH);
+      }
     }
   }
 
@@ -116,8 +124,8 @@ void loop() {
     digitalWrite(EMERGENCY_LED_PIN, LOW);
   }
 
-  // 4. Read Flow Sensor (Every 1 second)
-  if ((currentTime - oldTime) > 1000) {
+  // 4. Read Flow Sensor (Every 500ms)
+  if ((currentTime - oldTime) > 500) {
     detachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN));
     flowRate = ((1000.0 / (currentTime - oldTime)) * pulseCount) / FLOW_CALIBRATION;
     oldTime = currentTime;
