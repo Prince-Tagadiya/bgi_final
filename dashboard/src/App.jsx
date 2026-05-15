@@ -4,13 +4,13 @@ import {
   Activity, 
   Waves, 
   Zap, 
-  Cpu, 
   Unlink, 
   Link as LinkIcon,
   ShieldCheck,
   BarChart3,
-  RefreshCcw,
-  AlertCircle
+  AlertCircle,
+  Database,
+  Clock
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -113,36 +113,47 @@ function App() {
     }
   };
 
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="custom-tooltip" style={{ padding: '10px' }}>
+          <p style={{ margin: 0, fontSize: '0.875rem' }}>{`${payload[0].value.toFixed(2)}`}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <>
-      <div className="bg-mesh"></div>
-      <div className="app-container">
-        <header>
-          <div className="logo-container">
-            <div className="logo-orb">
-              <Droplets color="white" size={28} />
+    <div className="bg-space">
+      <div className="orb orb-1"></div>
+      <div className="orb orb-2"></div>
+      <div className="orb orb-3"></div>
+
+      <div className="glass-container">
+        <header className="header-glass">
+          <div className="brand">
+            <div className="brand-icon">
+              <Droplets className="icon-main" size={24} strokeWidth={2.5} />
             </div>
-            <div className="logo-text">
-              <span className="logo-title">JAL BOARD</span>
-              <span className="logo-subtitle">SMART WATER GRID</span>
+            <div className="brand-text">
+              <h1>JAL BOARD</h1>
+              <p>Smart Water Grid</p>
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <div className="btn-outline" style={{ border: 'none', background: 'rgba(255,255,255,0.05)' }}>
-              <div className={`status-indicator-ring ${isConnected ? 'status-online' : ''}`} 
-                   style={{ background: isConnected ? '' : '#ef4444' }}></div>
-              <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>
-                {isConnected ? 'LIVE FEED' : 'OFFLINE'}
-              </span>
+          <div className="controls">
+            <div className="status-badge">
+              <div className={`dot ${isConnected ? 'online' : ''}`}></div>
+              {isConnected ? 'System Live' : 'System Offline'}
             </div>
             
             {isConnected ? (
-              <button onClick={disconnectSerial} className="btn-outline">
-                <Unlink size={18} /> Disconnect
+              <button onClick={disconnectSerial} className="btn btn-disconnect">
+                <Unlink size={18} /> Disconnect Node
               </button>
             ) : (
-              <button onClick={connectSerial} className="btn-primary">
+              <button onClick={connectSerial} className="btn btn-connect">
                 <LinkIcon size={18} /> Connect Node
               </button>
             )}
@@ -150,141 +161,139 @@ function App() {
         </header>
 
         {error && (
-          <div className="glass-card" style={{ marginBottom: '3rem', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: '#ef4444' }}>
-              <AlertCircle size={24} />
-              <div>
-                <h4 style={{ fontWeight: 700 }}>Connection Issue</h4>
-                <p style={{ fontSize: '0.875rem', opacity: 0.8 }}>{error}</p>
-              </div>
+          <div className="error-banner">
+            <AlertCircle size={24} />
+            <div>
+              <h4 style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Connection Failed</h4>
+              <p style={{ fontSize: '0.875rem', opacity: 0.9 }}>{error}</p>
             </div>
           </div>
         )}
 
-        <div className="dashboard-grid">
+        <div className="main-grid">
           {/* Flow Rate Card */}
-          <div className="glass-card" style={{ '--card-accent': 'var(--accent-blue)' }}>
-            <div className="card-top">
+          <div className="metric-card" style={{ '--card-glow': 'var(--color-flow)', '--card-color': 'var(--color-flow)' }}>
+            <div className="card-header">
               <div>
-                <p className="stat-label">Flow Velocity</p>
-                <div className="stat-value text-gradient-blue">
+                <h3 className="card-title">Flow Velocity</h3>
+                <div className="card-value">
                   {data.flow.toFixed(2)}
-                  <span className="stat-unit">L/min</span>
+                  <span className="card-unit">L/min</span>
                 </div>
               </div>
-              <div className="icon-box">
-                <Activity className="text-sky-400" size={24} />
+              <div className="card-icon">
+                <Activity size={24} />
               </div>
             </div>
-            <div className="chart-wrapper">
-              <ResponsiveContainer width="100%" height={160}>
+            <div className="chart-container">
+              <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={history}>
                   <defs>
-                    <linearGradient id="colorFlow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                    <linearGradient id="flowGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-flow)" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="var(--color-flow)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <Area type="monotone" dataKey="flow" stroke="#38bdf8" strokeWidth={3} fillOpacity={1} fill="url(#colorFlow)" isAnimationActive={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area type="monotone" dataKey="flow" stroke="var(--color-flow)" strokeWidth={3} fillOpacity={1} fill="url(#flowGrad)" isAnimationActive={false} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           {/* TDS Card */}
-          <div className="glass-card" style={{ '--card-accent': 'var(--accent-amber)' }}>
-            <div className="card-top">
+          <div className="metric-card" style={{ '--card-glow': 'var(--color-tds)', '--card-color': 'var(--color-tds)' }}>
+            <div className="card-header">
               <div>
-                <p className="stat-label">Purity Index (TDS)</p>
-                <div className="stat-value text-gradient-amber">
+                <h3 className="card-title">Purity Index (TDS)</h3>
+                <div className="card-value">
                   {data.tds.toFixed(0)}
-                  <span className="stat-unit">PPM</span>
+                  <span className="card-unit">PPM</span>
                 </div>
               </div>
-              <div className="icon-box">
-                <Zap className="text-amber-400" size={24} />
+              <div className="card-icon">
+                <Zap size={24} />
               </div>
             </div>
-            <div className="chart-wrapper">
-              <ResponsiveContainer width="100%" height={160}>
+            <div className="chart-container">
+              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history}>
-                  <Line type="stepAfter" dataKey="tds" stroke="#f59e0b" strokeWidth={3} dot={false} isAnimationActive={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line type="monotone" dataKey="tds" stroke="var(--color-tds)" strokeWidth={3} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           {/* Turbidity Card */}
-          <div className="glass-card" style={{ '--card-accent': 'var(--accent-green)' }}>
-            <div className="card-top">
+          <div className="metric-card" style={{ '--card-glow': 'var(--color-turb)', '--card-color': 'var(--color-turb)' }}>
+            <div className="card-header">
               <div>
-                <p className="stat-label">Clarity (Turbidity)</p>
-                <div className="stat-value text-gradient-green">
+                <h3 className="card-title">Clarity (Turbidity)</h3>
+                <div className="card-value">
                   {data.turbidity.toFixed(1)}
-                  <span className="stat-unit">NTU</span>
+                  <span className="card-unit">NTU</span>
                 </div>
               </div>
-              <div className="icon-box">
-                <Waves className="text-emerald-400" size={24} />
+              <div className="card-icon">
+                <Waves size={24} />
               </div>
             </div>
-            <div className="chart-wrapper">
-              <ResponsiveContainer width="100%" height={160}>
+            <div className="chart-container">
+              <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={history}>
                   <defs>
-                    <linearGradient id="colorTurb" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    <linearGradient id="turbGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-turb)" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="var(--color-turb)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <Area type="monotone" dataKey="turbidity" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorTurb)" isAnimationActive={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area type="monotone" dataKey="turbidity" stroke="var(--color-turb)" strokeWidth={3} fillOpacity={1} fill="url(#turbGrad)" isAnimationActive={false} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
-          <div className="glass-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-              <ShieldCheck className="text-slate-400" size={20} />
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>System Verification</h3>
+        <div className="bottom-grid">
+          <div className="info-card">
+            <div className="info-header">
+              <ShieldCheck className="icon-main" size={24} />
+              <h3>System Diagnostics</h3>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="diagnostic-item">
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Supply Volume</span>
-                <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '1.1rem' }}>{data.total_flow.toFixed(3)} L</span>
+            <div>
+              <div className="data-row">
+                <span className="data-label">Total Supply Volume</span>
+                <span className="data-val val-highlight">{data.total_flow.toFixed(3)} L</span>
               </div>
-              <div className="diagnostic-item">
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Hardware Node</span>
-                <span style={{ fontWeight: 700 }}>GOV_ESP32_SECURE</span>
+              <div className="data-row">
+                <span className="data-label">Hardware Node</span>
+                <span className="data-val">GOV_UNO_SECURE</span>
               </div>
-              <div className="diagnostic-item">
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Last Sync</span>
-                <span style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>{lastUpdateTime}</span>
+              <div className="data-row">
+                <span className="data-label">Last Sync</span>
+                <span className="data-val" style={{ color: 'var(--color-turb)' }}>{lastUpdateTime}</span>
               </div>
             </div>
           </div>
 
-          <div className="glass-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-              <BarChart3 className="text-slate-400" size={20} />
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Infrastructure Health</h3>
+          <div className="info-card" style={{ position: 'relative', overflow: 'hidden' }}>
+            <div className="info-header">
+              <Database className="icon-main" size={24} />
+              <h3>Network Infrastructure</h3>
             </div>
-            <div style={{ padding: '1.5rem', borderRadius: '24px', background: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
-              <p style={{ fontSize: '0.925rem', color: '#bae6fd', lineHeight: 1.6 }}>
-                The smart grid is monitoring real-time flow differentials. If connection is lost, verify USB cable and close Serial monitors.
-              </p>
-              <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
-                <div style={{ flex: 1, height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px' }}>
-                  <div style={{ width: isConnected ? '100%' : '0%', height: '100%', background: 'var(--accent-blue)', transition: 'width 1s' }}></div>
-                </div>
-              </div>
+            <p style={{ color: 'var(--text-muted)', lineHeight: '1.6', fontSize: '0.95rem' }}>
+              The smart grid is actively monitoring real-time flow differentials and telemetry. To maintain data integrity, ensure the USB connection remains stable and serial monitors are closed during operation.
+            </p>
+            
+            <div style={{ marginTop: '2rem', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ width: isConnected ? '100%' : '0%', height: '100%', background: 'var(--color-turb)', transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }}></div>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
