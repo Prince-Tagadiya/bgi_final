@@ -17,6 +17,13 @@ float flowRate = 0.0;
 float totalLitres = 0.0;
 unsigned long oldTime = 0;
 
+// Smoothing / Filter Variables (Exponential Moving Average)
+float filteredFlow = 0.0;
+float filteredTDS = 0.0;
+float filteredTurbidity = 0.0;
+const float FLOW_ALPHA = 0.2;      // Responsive
+const float SENSOR_ALPHA = 0.1;    // Stable
+
 // Interrupt Service Routine
 void pulseCounter() {
   pulseCount++;
@@ -36,29 +43,41 @@ void loop() {
     unsigned long duration = millis() - oldTime;
     oldTime = millis();
 
-    // 1. Calculate Flow Rate
-    detachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN));
-    flowRate = (pulseCount * 1000.0 / duration) / FLOW_CALIBRATION_FACTOR;
-    totalLitres += (flowRate / 60.0) * (duration / 1000.0);
+    // 1. Calculate Flow Rate (Atomic Pulse Read)
+    noInterrupts();
+    unsigned long currentPulses = pulseCount;
     pulseCount = 0;
-    attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING);
+    interrupts();
+
+    float rawFlow = (currentPulses * 1000.0 / duration) / FLOW_CALIBRATION_FACTOR;
+    filteredFlow = (rawFlow * FLOW_ALPHA) + (filteredFlow * (1.0 - FLOW_ALPHA));
+    
+    flowRate = filteredFlow;
+    totalLitres += (flowRate / 60.0) * (duration / 1000.0);
 
     // 2. Read Sensors (Uno has 6 analog pins, so we can read both!)
     int tdsRaw = analogRead(TDS_PIN);
     float tdsVoltage = tdsRaw * (VOLTAGE_REF / ADC_RESOLUTION);
-    float tdsValue = (133.42 * pow(tdsVoltage, 3) - 255.86 * pow(tdsVoltage, 2) + 857.39 * tdsVoltage) * 0.5;
+    float rawTDS = (133.42 * pow(tdsVoltage, 3) - 255.86 * pow(tdsVoltage, 2) + 857.39 * tdsVoltage) * 0.5;
+    filteredTDS = (rawTDS * SENSOR_ALPHA) + (filteredTDS * (1.0 - SENSOR_ALPHA));
 
     int turbidityRaw = analogRead(TURBIDITY_PIN);
     float turbidityVoltage = turbidityRaw * (VOLTAGE_REF / ADC_RESOLUTION);
-    float turbidityValue = -1120.4 * pow(turbidityVoltage, 2) + 5742.3 * turbidityVoltage - 4353.8;
-    if (turbidityValue < 0) turbidityValue = 0;
+    float rawTurbidity = -1120.4 * pow(turbidityVoltage, 2) + 5742.3 * turbidityVoltage - 4353.8;
+    if (rawTurbidity < 0) rawTurbidity = 0;
+    filteredTurbidity = (rawTurbidity * SENSOR_ALPHA) + (filteredTurbidity * (1.0 - SENSOR_ALPHA));
 
-    // 3. Send Data as JSON
-    StaticJsonDocument<256> doc;
+    // 3. Determine Water Status
+    String status = (turbidityVoltage > 3.5) ? "CLEAR" : "DIRTY";
+
+    // 4. Send Data as JSON
+    StaticJsonDocument<300> doc;
     doc["node"] = "government";
     doc["flow"] = flowRate;
-    doc["tds"] = tdsValue;
-    doc["turbidity"] = turbidityValue;
+    doc["tds"] = filteredTDS;
+    doc["turbidity"] = filteredTurbidity;
+    doc["turbidity_v"] = turbidityVoltage;
+    doc["waterStatus"] = status;
     doc["total_flow"] = totalLitres;
     doc["timestamp"] = millis();
 
