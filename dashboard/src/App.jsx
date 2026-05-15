@@ -1,85 +1,54 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Droplets, 
-  Activity, 
-  Waves, 
-  Zap, 
-  Unlink, 
-  Link as LinkIcon,
-  ShieldCheck,
-  BarChart3,
-  AlertCircle,
-  Database,
-  Clock
+  Droplets, Activity, Waves, Zap, Unlink, Link as LinkIcon,
+  ShieldCheck, Database, AlertTriangle, Power, AlertOctagon
 } from 'lucide-react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  AreaChart,
-  Area
-} from 'recharts';
+import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 
 function App() {
-  const [data, setData] = useState({
-    flow: 0,
-    tds: 0,
-    turbidity: 0,
-    total_flow: 0
-  });
-  const [history, setHistory] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState(null);
-  const [lastUpdateTime, setLastUpdateTime] = useState('Never');
-  
-  const portRef = useRef(null);
-  const readerRef = useRef(null);
+  const [govData, setGovData] = useState({ flow: 0, tds: 0, turbidity: 0, total_flow: 0 });
+  const [rameshData, setRameshData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false });
+  const [priyaData, setPriyaData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false });
 
-  const connectSerial = async () => {
+  const [connections, setConnections] = useState({ gov: false, ramesh: false, priya: false });
+  
+  const portsRef = useRef({ gov: null, ramesh: null, priya: null });
+  const readersRef = useRef({ gov: null, ramesh: null, priya: null });
+
+  // Theft Detection Logic (Simple heuristic: Gov flow > 0 but consumers reading 0)
+  const isTheft = govData.flow > 0.5 && (rameshData.flow + priyaData.flow) < 0.1;
+
+  const connectNode = async (node) => {
     try {
       const port = await navigator.serial.requestPort();
-      try {
-        await port.open({ baudRate: 115200 });
-      } catch (openErr) {
-        if (openErr.name === 'NetworkError') {
-          throw new Error('Port is busy. Please close the Arduino Serial Monitor.');
-        }
-        throw openErr;
-      }
-      portRef.current = port;
-      setIsConnected(true);
-      setError(null);
-      readLoop(port);
+      await port.open({ baudRate: 115200 });
+      portsRef.current[node] = port;
+      setConnections(prev => ({ ...prev, [node]: true }));
+      readLoop(port, node);
     } catch (err) {
-      console.error('Serial Connection Error:', err);
-      setError(err.message || 'Could not connect to USB device');
-      setIsConnected(false);
+      console.error(`Connection error for ${node}:`, err);
     }
   };
 
-  const disconnectSerial = async () => {
+  const disconnectNode = async (node) => {
     try {
-      if (readerRef.current) await readerRef.current.cancel();
-      if (portRef.current) await portRef.current.close();
-    } catch (err) {
-      console.error('Disconnect error:', err);
+      if (readersRef.current[node]) await readersRef.current[node].cancel();
+      if (portsRef.current[node]) await portsRef.current[node].close();
+    } catch(err) {
+      console.error(`Disconnect error for ${node}:`, err);
     } finally {
-      setIsConnected(false);
-      portRef.current = null;
-      readerRef.current = null;
+      setConnections(prev => ({ ...prev, [node]: false }));
+      portsRef.current[node] = null;
+      readersRef.current[node] = null;
     }
   };
 
-  const readLoop = async (port) => {
+  const readLoop = async (port, node) => {
     try {
       const textDecoder = new TextDecoderStream();
-      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+      port.readable.pipeTo(textDecoder.writable);
       const reader = textDecoder.readable.getReader();
-      readerRef.current = reader;
+      readersRef.current[node] = reader;
 
       let buffer = '';
       while (true) {
@@ -94,203 +63,221 @@ function App() {
             const cleanLine = line.trim();
             if (cleanLine.startsWith('{') && cleanLine.endsWith('}')) {
               const jsonData = JSON.parse(cleanLine);
-              setData(jsonData);
-              setLastUpdateTime(new Date().toLocaleTimeString());
-              setHistory(prev => [...prev.slice(-49), {
-                ...jsonData,
-                time: new Date().toLocaleTimeString()
-              }]);
+              if (node === 'gov') setGovData(jsonData);
+              else if (node === 'ramesh') setRameshData(jsonData);
+              else if (node === 'priya') setPriyaData(jsonData);
             }
           } catch (e) {}
         }
       }
     } catch (err) {
-      console.error('Read loop error:', err);
-      if (isConnected) {
-        setError('Connection lost. Please check the USB cable.');
-        setIsConnected(false);
-      }
+      console.error(`Read error for ${node}:`, err);
+      setConnections(prev => ({ ...prev, [node]: false }));
     }
   };
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="custom-tooltip" style={{ padding: '10px' }}>
-          <p style={{ margin: 0, fontSize: '0.875rem' }}>{`${payload[0].value.toFixed(2)}`}</p>
-        </div>
-      );
+  const sendCommand = async (node, cmd) => {
+    const port = portsRef.current[node];
+    if (port && port.writable) {
+      const writer = port.writable.getWriter();
+      await writer.write(new TextEncoder().encode(cmd + '\n'));
+      writer.releaseLock();
     }
-    return null;
   };
 
   return (
-    <div className="bg-space">
+    <div className="bg-space" style={{ paddingBottom: '4rem' }}>
       <div className="orb orb-1"></div>
       <div className="orb orb-2"></div>
       <div className="orb orb-3"></div>
 
       <div className="glass-container">
-        <header className="header-glass">
+        {/* Header */}
+        <header className="header-glass" style={{ marginBottom: '2rem' }}>
           <div className="brand">
             <div className="brand-icon">
               <Droplets className="icon-main" size={24} strokeWidth={2.5} />
             </div>
             <div className="brand-text">
               <h1>JAL BOARD</h1>
-              <p>Smart Water Grid</p>
+              <p>Smart Water Grid - Central Dashboard</p>
             </div>
           </div>
           
           <div className="controls">
             <div className="status-badge">
-              <div className={`dot ${isConnected ? 'online' : ''}`}></div>
-              {isConnected ? 'System Live' : 'System Offline'}
+              <div className={`dot ${connections.gov ? 'online' : ''}`}></div>
+              {connections.gov ? 'Gov Node Online' : 'Gov Node Offline'}
             </div>
             
-            {isConnected ? (
-              <button onClick={disconnectSerial} className="btn btn-disconnect">
-                <Unlink size={18} /> Disconnect Node
+            {connections.gov ? (
+              <button onClick={() => disconnectNode('gov')} className="btn btn-disconnect">
+                <Unlink size={18} /> Disconnect Gov
               </button>
             ) : (
-              <button onClick={connectSerial} className="btn btn-connect">
-                <LinkIcon size={18} /> Connect Node
+              <button onClick={() => connectNode('gov')} className="btn btn-connect">
+                <LinkIcon size={18} /> Connect Gov Node
               </button>
             )}
           </div>
         </header>
 
-        {error && (
-          <div className="error-banner">
-            <AlertCircle size={24} />
+        {isTheft && (
+          <div className="error-banner" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid red' }}>
+            <AlertTriangle size={32} color="red" />
             <div>
-              <h4 style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Connection Failed</h4>
-              <p style={{ fontSize: '0.875rem', opacity: 0.9 }}>{error}</p>
+              <h4 style={{ fontWeight: 800, color: 'red' }}>CRITICAL: WATER THEFT DETECTED</h4>
+              <p style={{ color: 'red' }}>Government flow is active but consumer nodes report zero usage. Possible pipeline breach or bypass.</p>
             </div>
           </div>
         )}
 
+        {/* GOVERNMENT DASHBOARD */}
+        <h2 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>Government Source Telemetry</h2>
         <div className="main-grid">
-          {/* Flow Rate Card */}
           <div className="metric-card" style={{ '--card-glow': 'var(--color-flow)', '--card-color': 'var(--color-flow)' }}>
             <div className="card-header">
               <div>
                 <h3 className="card-title">Flow Velocity</h3>
-                <div className="card-value">
-                  {data.flow.toFixed(2)}
-                  <span className="card-unit">L/min</span>
-                </div>
+                <div className="card-value">{govData.flow.toFixed(2)}<span className="card-unit">L/min</span></div>
               </div>
-              <div className="card-icon">
-                <Activity size={24} />
-              </div>
-            </div>
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={history}>
-                  <defs>
-                    <linearGradient id="flowGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-flow)" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="var(--color-flow)" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="flow" stroke="var(--color-flow)" strokeWidth={3} fillOpacity={1} fill="url(#flowGrad)" isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="card-icon"><Activity size={24} /></div>
             </div>
           </div>
 
-          {/* TDS Card */}
           <div className="metric-card" style={{ '--card-glow': 'var(--color-tds)', '--card-color': 'var(--color-tds)' }}>
             <div className="card-header">
               <div>
                 <h3 className="card-title">Purity Index (TDS)</h3>
-                <div className="card-value">
-                  {data.tds.toFixed(0)}
-                  <span className="card-unit">PPM</span>
-                </div>
+                <div className="card-value">{govData.tds.toFixed(0)}<span className="card-unit">PPM</span></div>
               </div>
-              <div className="card-icon">
-                <Zap size={24} />
-              </div>
-            </div>
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={history}>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="tds" stroke="var(--color-tds)" strokeWidth={3} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="card-icon"><Zap size={24} /></div>
             </div>
           </div>
 
-          {/* Turbidity Card */}
           <div className="metric-card" style={{ '--card-glow': 'var(--color-turb)', '--card-color': 'var(--color-turb)' }}>
             <div className="card-header">
               <div>
                 <h3 className="card-title">Clarity (Turbidity)</h3>
-                <div className="card-value">
-                  {data.turbidity.toFixed(1)}
-                  <span className="card-unit">NTU</span>
-                </div>
+                <div className="card-value">{govData.turbidity.toFixed(1)}<span className="card-unit">NTU</span></div>
               </div>
-              <div className="card-icon">
-                <Waves size={24} />
-              </div>
-            </div>
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={history}>
-                  <defs>
-                    <linearGradient id="turbGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-turb)" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="var(--color-turb)" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="turbidity" stroke="var(--color-turb)" strokeWidth={3} fillOpacity={1} fill="url(#turbGrad)" isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="card-icon"><Waves size={24} /></div>
             </div>
           </div>
         </div>
 
+        {/* CONSUMER NODES */}
+        <h2 style={{ margin: '3rem 0 1rem 0', color: 'var(--text-main)' }}>Consumer Nodes Management</h2>
         <div className="bottom-grid">
-          <div className="info-card">
-            <div className="info-header">
-              <ShieldCheck className="icon-main" size={24} />
-              <h3>System Diagnostics</h3>
+          
+          {/* Consumer 1: Ramesh */}
+          <div className="info-card" style={{ border: rameshData.tamper ? '2px solid red' : '' }}>
+            <div className="info-header" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Database className="icon-main" size={24} />
+                <h3>Consumer: Ramesh</h3>
+              </div>
+              {connections.ramesh ? 
+                <button onClick={() => disconnectNode('ramesh')} className="btn btn-disconnect" style={{ padding: '0.5rem 1rem' }}>Disconnect</button> :
+                <button onClick={() => connectNode('ramesh')} className="btn btn-connect" style={{ padding: '0.5rem 1rem' }}>Connect Node</button>
+              }
             </div>
-            <div>
-              <div className="data-row">
-                <span className="data-label">Total Supply Volume</span>
-                <span className="data-val val-highlight">{data.total_flow.toFixed(3)} L</span>
+
+            {rameshData.tamper && (
+              <div style={{ padding: '0.5rem', background: '#fee2e2', color: '#b91c1c', borderRadius: '8px', marginBottom: '1rem', fontWeight: 'bold', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <AlertOctagon size={18} /> TAMPER DETECTED! Valve Locked.
               </div>
-              <div className="data-row">
-                <span className="data-label">Hardware Node</span>
-                <span className="data-val">GOV_UNO_SECURE</span>
+            )}
+            {rameshData.emergency && (
+              <div style={{ padding: '0.5rem', background: '#fef3c7', color: '#b45309', borderRadius: '8px', marginBottom: '1rem', fontWeight: 'bold' }}>
+                Emergency Water Access Active
               </div>
-              <div className="data-row">
-                <span className="data-label">Last Sync</span>
-                <span className="data-val" style={{ color: 'var(--color-turb)' }}>{lastUpdateTime}</span>
-              </div>
+            )}
+
+            <div className="data-row">
+              <span className="data-label">Live Flow Rate</span>
+              <span className="data-val">{rameshData.flow.toFixed(2)} L/min</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Total Consumption</span>
+              <span className="data-val val-highlight">{rameshData.total_flow.toFixed(2)} L</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Valve Status</span>
+              <span className="data-val" style={{ color: rameshData.valve ? 'var(--color-turb)' : 'red' }}>
+                {rameshData.valve ? 'OPEN' : 'CLOSED'}
+              </span>
+            </div>
+            
+            {/* Gov Controls for Ramesh */}
+            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+              <button onClick={() => sendCommand('ramesh', rameshData.valve ? 'VALVE_OFF' : 'VALVE_ON')} 
+                      style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', background: 'white' }}>
+                <Power size={16} /> Toggle Valve
+              </button>
+              {rameshData.tamper && (
+                <button onClick={() => sendCommand('ramesh', 'RESET_TAMPER')} 
+                        style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Reset Tamper Lock
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="info-card" style={{ position: 'relative', overflow: 'hidden' }}>
-            <div className="info-header">
-              <Database className="icon-main" size={24} />
-              <h3>Network Infrastructure</h3>
+          {/* Consumer 2: Priya */}
+          <div className="info-card" style={{ border: priyaData.tamper ? '2px solid red' : '' }}>
+            <div className="info-header" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Database className="icon-main" size={24} />
+                <h3>Consumer: Priya</h3>
+              </div>
+              {connections.priya ? 
+                <button onClick={() => disconnectNode('priya')} className="btn btn-disconnect" style={{ padding: '0.5rem 1rem' }}>Disconnect</button> :
+                <button onClick={() => connectNode('priya')} className="btn btn-connect" style={{ padding: '0.5rem 1rem' }}>Connect Node</button>
+              }
             </div>
-            <p style={{ color: 'var(--text-muted)', lineHeight: '1.6', fontSize: '0.95rem' }}>
-              The smart grid is actively monitoring real-time flow differentials and telemetry. To maintain data integrity, ensure the USB connection remains stable and serial monitors are closed during operation.
-            </p>
+
+            {priyaData.tamper && (
+              <div style={{ padding: '0.5rem', background: '#fee2e2', color: '#b91c1c', borderRadius: '8px', marginBottom: '1rem', fontWeight: 'bold', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <AlertOctagon size={18} /> TAMPER DETECTED! Valve Locked.
+              </div>
+            )}
+            {priyaData.emergency && (
+              <div style={{ padding: '0.5rem', background: '#fef3c7', color: '#b45309', borderRadius: '8px', marginBottom: '1rem', fontWeight: 'bold' }}>
+                Emergency Water Access Active
+              </div>
+            )}
+
+            <div className="data-row">
+              <span className="data-label">Live Flow Rate</span>
+              <span className="data-val">{priyaData.flow.toFixed(2)} L/min</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Total Consumption</span>
+              <span className="data-val val-highlight">{priyaData.total_flow.toFixed(2)} L</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Valve Status</span>
+              <span className="data-val" style={{ color: priyaData.valve ? 'var(--color-turb)' : 'red' }}>
+                {priyaData.valve ? 'OPEN' : 'CLOSED'}
+              </span>
+            </div>
             
-            <div style={{ marginTop: '2rem', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ width: isConnected ? '100%' : '0%', height: '100%', background: 'var(--color-turb)', transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }}></div>
+            {/* Gov Controls for Priya */}
+            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+              <button onClick={() => sendCommand('priya', priyaData.valve ? 'VALVE_OFF' : 'VALVE_ON')} 
+                      style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', background: 'white' }}>
+                <Power size={16} /> Toggle Valve
+              </button>
+              {priyaData.tamper && (
+                <button onClick={() => sendCommand('priya', 'RESET_TAMPER')} 
+                        style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Reset Tamper Lock
+                </button>
+              )}
             </div>
           </div>
+
         </div>
       </div>
     </div>
