@@ -4,11 +4,13 @@ import {
   Activity, 
   Waves, 
   Zap, 
-  Settings, 
-  History, 
   Cpu, 
   Unlink, 
-  Link as LinkIcon 
+  Link as LinkIcon,
+  ShieldCheck,
+  BarChart3,
+  RefreshCcw,
+  AlertCircle
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -39,19 +41,15 @@ function App() {
 
   const connectSerial = async () => {
     try {
-      // 1. Request port from user
       const port = await navigator.serial.requestPort();
-      
-      // 2. Open port - check if already open
       try {
         await port.open({ baudRate: 115200 });
       } catch (openErr) {
         if (openErr.name === 'NetworkError') {
-          throw new Error('Port is busy. Please close the Arduino Serial Monitor or other apps using this port.');
+          throw new Error('Port is busy. Please close the Arduino Serial Monitor.');
         }
         throw openErr;
       }
-
       portRef.current = port;
       setIsConnected(true);
       setError(null);
@@ -65,12 +63,8 @@ function App() {
 
   const disconnectSerial = async () => {
     try {
-      if (readerRef.current) {
-        await readerRef.current.cancel();
-      }
-      if (portRef.current) {
-        await portRef.current.close();
-      }
+      if (readerRef.current) await readerRef.current.cancel();
+      if (portRef.current) await portRef.current.close();
     } catch (err) {
       console.error('Disconnect error:', err);
     } finally {
@@ -88,11 +82,9 @@ function App() {
       readerRef.current = reader;
 
       let buffer = '';
-
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        
         buffer += value;
         const lines = buffer.split('\n');
         buffer = lines.pop();
@@ -102,18 +94,14 @@ function App() {
             const cleanLine = line.trim();
             if (cleanLine.startsWith('{') && cleanLine.endsWith('}')) {
               const jsonData = JSON.parse(cleanLine);
-              if (jsonData.node === 'government') {
-                setData(jsonData);
-                setLastUpdateTime(new Date().toLocaleTimeString());
-                setHistory(prev => [...prev.slice(-29), {
-                  ...jsonData,
-                  time: new Date().toLocaleTimeString()
-                }]);
-              }
+              setData(jsonData);
+              setLastUpdateTime(new Date().toLocaleTimeString());
+              setHistory(prev => [...prev.slice(-49), {
+                ...jsonData,
+                time: new Date().toLocaleTimeString()
+              }]);
             }
-          } catch (e) {
-            // Ignore malformed JSON during stream startup
-          }
+          } catch (e) {}
         }
       }
     } catch (err) {
@@ -126,156 +114,177 @@ function App() {
   };
 
   return (
-    <div className="app-container">
-      <header>
-        <div className="logo">
-          <div className="logo-icon">
-            <Droplets color="white" size={24} />
-          </div>
-          <span>BGI Smart Water Grid</span>
-        </div>
-        
-        <div className="flex gap-4 items-center">
-          <div className={`status-badge ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
-            <div className={`status-indicator ${isConnected ? 'status-online' : 'status-offline'}`}></div>
-            {isConnected ? 'USB Live' : 'Offline'}
+    <>
+      <div className="bg-mesh"></div>
+      <div className="app-container">
+        <header>
+          <div className="logo-container">
+            <div className="logo-orb">
+              <Droplets color="white" size={28} />
+            </div>
+            <div className="logo-text">
+              <span className="logo-title">JAL BOARD</span>
+              <span className="logo-subtitle">SMART WATER GRID</span>
+            </div>
           </div>
           
-          {isConnected ? (
-            <button onClick={disconnectSerial} className="bg-red-500/20 hover:bg-red-500/40 text-red-400">
-              <Unlink size={18} /> Disconnect
-            </button>
-          ) : (
-            <button onClick={connectSerial}>
-              <LinkIcon size={18} /> Connect Node
-            </button>
-          )}
-        </div>
-      </header>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div className="btn-outline" style={{ border: 'none', background: 'rgba(255,255,255,0.05)' }}>
+              <div className={`status-indicator-ring ${isConnected ? 'status-online' : ''}`} 
+                   style={{ background: isConnected ? '' : '#ef4444' }}></div>
+              <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                {isConnected ? 'LIVE FEED' : 'OFFLINE'}
+              </span>
+            </div>
+            
+            {isConnected ? (
+              <button onClick={disconnectSerial} className="btn-outline">
+                <Unlink size={18} /> Disconnect
+              </button>
+            ) : (
+              <button onClick={connectSerial} className="btn-primary">
+                <LinkIcon size={18} /> Connect Node
+              </button>
+            )}
+          </div>
+        </header>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-xl mb-6 text-red-400 flex items-start gap-3">
-          <Activity size={20} className="mt-1 flex-shrink-0" /> 
-          <div>
-            <p className="font-semibold">Connection Issue</p>
-            <p className="text-sm opacity-90">{error}</p>
+        {error && (
+          <div className="glass-card" style={{ marginBottom: '3rem', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: '#ef4444' }}>
+              <AlertCircle size={24} />
+              <div>
+                <h4 style={{ fontWeight: 700 }}>Connection Issue</h4>
+                <p style={{ fontSize: '0.875rem', opacity: 0.8 }}>{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="dashboard-grid">
+          {/* Flow Rate Card */}
+          <div className="glass-card" style={{ '--card-accent': 'var(--accent-blue)' }}>
+            <div className="card-top">
+              <div>
+                <p className="stat-label">Flow Velocity</p>
+                <div className="stat-value text-gradient-blue">
+                  {data.flow.toFixed(2)}
+                  <span className="stat-unit">L/min</span>
+                </div>
+              </div>
+              <div className="icon-box">
+                <Activity className="text-sky-400" size={24} />
+              </div>
+            </div>
+            <div className="chart-wrapper">
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={history}>
+                  <defs>
+                    <linearGradient id="colorFlow" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="flow" stroke="#38bdf8" strokeWidth={3} fillOpacity={1} fill="url(#colorFlow)" isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* TDS Card */}
+          <div className="glass-card" style={{ '--card-accent': 'var(--accent-amber)' }}>
+            <div className="card-top">
+              <div>
+                <p className="stat-label">Purity Index (TDS)</p>
+                <div className="stat-value text-gradient-amber">
+                  {data.tds.toFixed(0)}
+                  <span className="stat-unit">PPM</span>
+                </div>
+              </div>
+              <div className="icon-box">
+                <Zap className="text-amber-400" size={24} />
+              </div>
+            </div>
+            <div className="chart-wrapper">
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={history}>
+                  <Line type="stepAfter" dataKey="tds" stroke="#f59e0b" strokeWidth={3} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Turbidity Card */}
+          <div className="glass-card" style={{ '--card-accent': 'var(--accent-green)' }}>
+            <div className="card-top">
+              <div>
+                <p className="stat-label">Clarity (Turbidity)</p>
+                <div className="stat-value text-gradient-green">
+                  {data.turbidity.toFixed(1)}
+                  <span className="stat-unit">NTU</span>
+                </div>
+              </div>
+              <div className="icon-box">
+                <Waves className="text-emerald-400" size={24} />
+              </div>
+            </div>
+            <div className="chart-wrapper">
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={history}>
+                  <defs>
+                    <linearGradient id="colorTurb" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="turbidity" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorTurb)" isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
-      )}
 
-      <div className="dashboard-grid">
-        {/* Flow Rate Card */}
-        <div className="card" style={{ animationDelay: '0.1s' }}>
-          <div className="card-header">
-            <div>
-              <p className="card-label">Real-time Flow</p>
-              <h2 className="card-value sensor-flow">{data.flow.toFixed(2)}</h2>
-              <span className="card-unit">L/min</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
+          <div className="glass-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
+              <ShieldCheck className="text-slate-400" size={20} />
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>System Verification</h3>
             </div>
-            <div className="card-icon">
-              <Activity className="sensor-flow" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="diagnostic-item">
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Supply Volume</span>
+                <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '1.1rem' }}>{data.total_flow.toFixed(3)} L</span>
+              </div>
+              <div className="diagnostic-item">
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Hardware Node</span>
+                <span style={{ fontWeight: 700 }}>GOV_ESP32_SECURE</span>
+              </div>
+              <div className="diagnostic-item">
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Last Sync</span>
+                <span style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>{lastUpdateTime}</span>
+              </div>
             </div>
           </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={history}>
-                <defs>
-                  <linearGradient id="colorFlow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <Area type="monotone" dataKey="flow" stroke="#38bdf8" fillOpacity={1} fill="url(#colorFlow)" isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
 
-        {/* TDS Card */}
-        <div className="card" style={{ animationDelay: '0.2s' }}>
-          <div className="card-header">
-            <div>
-              <p className="card-label">Water Purity (TDS)</p>
-              <h2 className="card-value sensor-tds">{data.tds.toFixed(0)}</h2>
-              <span className="card-unit">PPM</span>
+          <div className="glass-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
+              <BarChart3 className="text-slate-400" size={20} />
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Infrastructure Health</h3>
             </div>
-            <div className="card-icon">
-              <Zap className="sensor-tds" />
+            <div style={{ padding: '1.5rem', borderRadius: '24px', background: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
+              <p style={{ fontSize: '0.925rem', color: '#bae6fd', lineHeight: 1.6 }}>
+                The smart grid is monitoring real-time flow differentials. If connection is lost, verify USB cable and close Serial monitors.
+              </p>
+              <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+                <div style={{ flex: 1, height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px' }}>
+                  <div style={{ width: isConnected ? '100%' : '0%', height: '100%', background: 'var(--accent-blue)', transition: 'width 1s' }}></div>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={history}>
-                <Line type="monotone" dataKey="tds" stroke="#fbbf24" strokeWidth={3} dot={false} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Turbidity Card */}
-        <div className="card" style={{ animationDelay: '0.3s' }}>
-          <div className="card-header">
-            <div>
-              <p className="card-label">Turbidity</p>
-              <h2 className="card-value sensor-turbidity">{data.turbidity.toFixed(1)}</h2>
-              <span className="card-unit">NTU</span>
-            </div>
-            <div className="card-icon">
-              <Waves className="sensor-turbidity" />
-            </div>
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={history}>
-                <defs>
-                  <linearGradient id="colorTurb" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4ade80" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#4ade80" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <Area type="monotone" dataKey="turbidity" stroke="#4ade80" fillOpacity={1} fill="url(#colorTurb)" isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
           </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card" style={{ animationDelay: '0.4s' }}>
-          <div className="flex items-center gap-3 mb-6">
-            <Cpu className="text-slate-400" />
-            <h3 className="text-xl font-semibold">Node Diagnostics</h3>
-          </div>
-          <div className="space-y-4">
-            <div className="flex justify-between p-3 rounded-lg bg-white/5">
-              <span className="text-slate-400">Total Consumption</span>
-              <span className="font-mono">{data.total_flow.toFixed(3)} L</span>
-            </div>
-            <div className="flex justify-between p-3 rounded-lg bg-white/5">
-              <span className="text-slate-400">Node ID</span>
-              <span className="font-mono">GOV_NODE_ESP32_01</span>
-            </div>
-            <div className="flex justify-between p-3 rounded-lg bg-white/5">
-              <span className="text-slate-400">Last Telemetry</span>
-              <span className="font-mono">{lastUpdateTime}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ animationDelay: '0.5s' }}>
-          <div className="flex items-center gap-3 mb-6">
-            <History className="text-slate-400" />
-            <h3 className="text-xl font-semibold">System Insights</h3>
-          </div>
-          <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-            <p className="text-sm text-blue-300">
-              The Government Node is currently streaming live telemetry over USB. 
-              <strong>Tip:</strong> If connection fails, ensure the Arduino Serial Monitor is closed.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 
