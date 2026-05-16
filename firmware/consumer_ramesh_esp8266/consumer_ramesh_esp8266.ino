@@ -94,7 +94,13 @@ void loop() {
     } else if (command == "RESET_FLOW") {
       totalLitres = 0.0;
     } else if (command == "TRIGGER_SOS") {
-      if (!emergencyMode && !isTampered) {
+      if (isTampered) return;
+      if (emergencyMode) {
+        emergencyMode = false;
+        valveState = false;
+        digitalWrite(RELAY_PIN, HIGH);
+        digitalWrite(EMERGENCY_LED_PIN, LOW);
+      } else {
         emergencyMode = true;
         waterLimit = totalLitres + EMERGENCY_LIMIT;
         valveState = true;
@@ -107,7 +113,13 @@ void loop() {
   // 2. Emergency Button Logic
   if (digitalRead(EMERGENCY_BUTTON_PIN) == LOW && (currentTime - lastButtonPress > 1000)) {
     lastButtonPress = currentTime;
-    if (!emergencyMode && !isTampered) {
+    if (isTampered) return;
+    if (emergencyMode) {
+      emergencyMode = false;
+      valveState = false;
+      digitalWrite(RELAY_PIN, HIGH);
+      digitalWrite(EMERGENCY_LED_PIN, LOW);
+    } else {
       emergencyMode = true;
       waterLimit = totalLitres + EMERGENCY_LIMIT;
       valveState = true;

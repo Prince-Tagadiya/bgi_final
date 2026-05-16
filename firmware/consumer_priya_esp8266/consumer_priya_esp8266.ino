@@ -25,6 +25,8 @@ bool valveState = true;
 float waterLimit = 0.0; // 0 means unlimited or controlled by Gov
 bool emergencyMode = false;
 const float EMERGENCY_LIMIT = 0.5; // 0.5 Litres for fast demo
+unsigned long sosStartTime = 0;
+const unsigned long SOS_DURATION = 30000; // 30 seconds for Priya demo
 
 // Tamper (MPU6050 simplified I2C reading)
 const int MPU_ADDR = 0x68;
@@ -94,9 +96,15 @@ void loop() {
     } else if (command == "RESET_FLOW") {
       totalLitres = 0.0;
     } else if (command == "TRIGGER_SOS") {
-      if (!emergencyMode && !isTampered) {
+      if (isTampered) return;
+      if (emergencyMode) {
+        emergencyMode = false;
+        valveState = false;
+        digitalWrite(RELAY_PIN, HIGH);
+        digitalWrite(EMERGENCY_LED_PIN, LOW);
+      } else {
         emergencyMode = true;
-        waterLimit = totalLitres + EMERGENCY_LIMIT;
+        sosStartTime = millis();
         valveState = true;
         digitalWrite(RELAY_PIN, LOW);
         digitalWrite(EMERGENCY_LED_PIN, HIGH);
@@ -107,20 +115,26 @@ void loop() {
   // 2. Emergency Button Logic
   if (digitalRead(EMERGENCY_BUTTON_PIN) == LOW && (currentTime - lastButtonPress > 1000)) {
     lastButtonPress = currentTime;
-    if (!emergencyMode && !isTampered) {
+    if (isTampered) return;
+    if (emergencyMode) {
+      emergencyMode = false;
+      valveState = false;
+      digitalWrite(RELAY_PIN, HIGH);
+      digitalWrite(EMERGENCY_LED_PIN, LOW);
+    } else {
       emergencyMode = true;
-      waterLimit = totalLitres + EMERGENCY_LIMIT;
+      sosStartTime = millis();
       valveState = true;
       digitalWrite(RELAY_PIN, LOW);
       digitalWrite(EMERGENCY_LED_PIN, HIGH);
     }
   }
 
-  // 3. Water Limit Logic (Emergency or Gov set limit)
-  if (emergencyMode && totalLitres >= waterLimit) {
+  // 3. Water Limit Logic (Priya: 30s Time Limit)
+  if (emergencyMode && (currentTime - sosStartTime >= SOS_DURATION)) {
     emergencyMode = false;
     valveState = false;
-    digitalWrite(RELAY_PIN, HIGH); // Turn off valve
+    digitalWrite(RELAY_PIN, HIGH);
     digitalWrite(EMERGENCY_LED_PIN, LOW);
   }
 
