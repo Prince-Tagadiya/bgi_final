@@ -21,11 +21,32 @@ function App() {
   const portsRef = useRef({ gov: null, ramesh: null, priya: null });
   const readersRef = useRef({ gov: null, ramesh: null, priya: null });
 
+  const [isTheft, setIsTheft] = useState(false);
+  const theftTimerRef = useRef(null);
+
   // Theft & Leakage Detection Logic
   // Leakage / Cut Pipe: If Gov says water is flowing fast, but Consumer says valve is open and 0 flow.
-  const rameshLeak = connections.ramesh && rameshData.valve && govData.flow > 0.5 && rameshData.flow < 0.1;
-  const priyaLeak = connections.priya && priyaData.valve && govData.flow > 0.5 && priyaData.flow < 0.1;
-  const isTheft = govData.flow > 0.5 && (rameshData.flow + priyaData.flow) < 0.1 && (!rameshData.valve || !priyaData.valve);
+  const rameshLeak = connections.ramesh && rameshData.valve && govData.flow > 0.05 && rameshData.flow < 0.01;
+  const priyaLeak = connections.priya && priyaData.valve && govData.flow > 0.05 && priyaData.flow < 0.01;
+
+  useEffect(() => {
+    // New Theft Logic: Gov > 0 and (Ramesh + Priya) == 0 for 5 seconds
+    const conditionMet = govData.flow > 0.05 && (rameshData.flow + priyaData.flow) < 0.01;
+
+    if (conditionMet) {
+      if (!theftTimerRef.current) {
+        theftTimerRef.current = setTimeout(() => {
+          setIsTheft(true);
+        }, 5000);
+      }
+    } else {
+      if (theftTimerRef.current) {
+        clearTimeout(theftTimerRef.current);
+        theftTimerRef.current = null;
+      }
+      setIsTheft(false);
+    }
+  }, [govData.flow, rameshData.flow, priyaData.flow]);
 
   // Balance Management (Accelerated for hackathon demo: starts at Rs 10 instead of 500)
   const rameshBalance = 10 + rameshRecharges - (rameshData.total_flow * 2);
