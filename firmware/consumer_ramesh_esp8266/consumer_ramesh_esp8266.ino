@@ -135,10 +135,12 @@ void loop() {
     // Simplified: addedLitres = (flowRate / 60.0) * 0.5 because it runs every 500ms
     addedLitres = (flowRate / 60.0) * 0.5;
 
-    if (emergencyMode) {
-      sosUsed += addedLitres;
-    } else {
-      totalLitres += addedLitres;
+    if (valveState) {
+      if (emergencyMode) {
+        sosUsed += addedLitres;
+      } else {
+        totalLitres += addedLitres;
+      }
     }
     
     pulseCount = 0;
