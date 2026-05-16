@@ -30,45 +30,58 @@ function App() {
   const isPriyaBlocked = priyaBalance <= 0 && !priyaData.emergency;
 
   useEffect(() => {
-    if (connections.ramesh && isRameshBlocked && rameshData.valve) {
-      sendCommand('ramesh', 'VALVE_OFF');
-    }
-    if (connections.priya && isPriyaBlocked && priyaData.valve) {
-      sendCommand('priya', 'VALVE_OFF');
-    }
-  }, [isRameshBlocked, rameshData.valve, connections.ramesh, isPriyaBlocked, priyaData.valve, connections.priya]);
+    // Auto-reconnect to previously authorized ports
+    const autoReconnect = async () => {
+      try {
+        const ports = await navigator.serial.getPorts();
+        for (const port of ports) {
+          if (port.readable === null) { // If not already open
+            await port.open({ baudRate: 115200 });
+            // We don't know which node this is yet, readLoop will identify it
+            readLoop(port);
+          }
+        }
+      } catch (err) {
+        console.error("Auto-reconnect failed:", err);
+      }
+    };
+    autoReconnect();
+  }, []);
 
-  const connectNode = async (node) => {
+  const connectNode = async () => {
     try {
       const port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
-      portsRef.current[node] = port;
-      setConnections(prev => ({ ...prev, [node]: true }));
-      readLoop(port, node);
+      readLoop(port);
     } catch (err) {
-      console.error(`Connection error for ${node}:`, err);
+      console.error("Connection error:", err);
     }
   };
 
   const disconnectNode = async (node) => {
     try {
-      if (readersRef.current[node]) await readersRef.current[node].cancel();
-      if (portsRef.current[node]) await portsRef.current[node].close();
-    } catch(err) {
-      console.error(`Disconnect error for ${node}:`, err);
-    } finally {
+      const reader = readersRef.current[node];
+      const port = portsRef.current[node];
+      if (reader) {
+        await reader.cancel();
+        readersRef.current[node] = null;
+      }
+      if (port) {
+        await port.close();
+        portsRef.current[node] = null;
+      }
       setConnections(prev => ({ ...prev, [node]: false }));
-      portsRef.current[node] = null;
-      readersRef.current[node] = null;
+    } catch (err) {
+      console.error(`Disconnect error for ${node}:`, err);
     }
   };
 
-  const readLoop = async (port, node) => {
+  const readLoop = async (port) => {
     try {
       const textDecoder = new TextDecoderStream();
       port.readable.pipeTo(textDecoder.writable);
       const reader = textDecoder.readable.getReader();
-      readersRef.current[node] = reader;
+      let detectedNode = null;
 
       let buffer = '';
       while (true) {
@@ -83,16 +96,33 @@ function App() {
             const cleanLine = line.trim();
             if (cleanLine.startsWith('{') && cleanLine.endsWith('}')) {
               const jsonData = JSON.parse(cleanLine);
-              if (node === 'gov') setGovData(jsonData);
-              else if (node === 'ramesh') setRameshData(jsonData);
-              else if (node === 'priya') setPriyaData(jsonData);
+              
+              // Identify node on the fly
+              let nodeKey = null;
+              if (jsonData.node === 'government_uno') nodeKey = 'gov';
+              else if (jsonData.node === 'Ramesh') nodeKey = 'ramesh';
+              else if (jsonData.node === 'Priya') nodeKey = 'priya';
+
+              if (nodeKey) {
+                if (!detectedNode) {
+                  detectedNode = nodeKey;
+                  portsRef.current[nodeKey] = port;
+                  readersRef.current[nodeKey] = reader;
+                  setConnections(prev => ({ ...prev, [nodeKey]: true }));
+                }
+                
+                if (nodeKey === 'gov') setGovData(prev => ({ ...prev, ...jsonData }));
+                else if (nodeKey === 'ramesh') setRameshData(prev => ({ ...prev, ...jsonData }));
+                else if (nodeKey === 'priya') setPriyaData(prev => ({ ...prev, ...jsonData }));
+              }
             }
           } catch (e) {}
         }
       }
     } catch (err) {
-      console.error(`Read error for ${node}:`, err);
-      setConnections(prev => ({ ...prev, [node]: false }));
+      console.error("Read error:", err);
+      // Clean up connections if error occurs
+      setConnections(prev => ({ ...prev, gov: false, ramesh: false, priya: false }));
     }
   };
 
@@ -161,17 +191,16 @@ function App() {
           <span className="balance-label"><Droplets size={16} /> CURRENT BALANCE</span>
           <button className="recharge-btn"><Zap size={16} fill="currentColor" /> Recharge Now</button>
         </div>
-        <div className="balance-amount">₹{ (10 - consumerData.total_flow * 2).toFixed(2) }</div>
+        <div className="balance-amount">₹{ (10 - (consumerData.total_flow || 0) * 2).toFixed(2) }</div>
         <div className="billing-rate">Billing Rate: ₹2/L</div>
         
         <div className="usage-stats">
           <div className="usage-box">
-            <div className="usage-box-label">TODAY'S USAGE</div>
-            <div className="usage-box-val">{(consumerData.total_flow).toFixed(0)} L</div>
+            <div className="usage-box-val">{((consumerData.total_flow || 0)).toFixed(0)} L</div>
           </div>
           <div className="usage-box">
             <div className="usage-box-label">MONTHLY USAGE (EST.)</div>
-            <div className="usage-box-val">{(consumerData.total_flow * 30).toFixed(0)} L</div>
+            <div className="usage-box-val">{((consumerData.total_flow || 0) * 30).toFixed(0)} L</div>
           </div>
         </div>
       </div>
@@ -191,7 +220,7 @@ function App() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2 className="section-title">🏡 My Water System</h2>
         {!connections[nodeKey] ? 
-          <button onClick={() => connectNode(nodeKey)} className="btn-outline">Connect Hardware</button> :
+          <button onClick={() => connectNode()} className="btn-outline">Connect Hardware</button> :
           <button onClick={() => disconnectNode(nodeKey)} className="btn-outline" style={{ color: 'red' }}>Disconnect</button>
         }
       </div>
@@ -217,16 +246,16 @@ function App() {
             <h3 className="section-title" style={{ fontSize: '0.875rem', textTransform: 'uppercase', color: 'var(--color-info)' }}>
               <Droplets size={16} /> CURRENT HOME FLOW
             </h3>
-            <div className="home-flow-val">{consumerData.flow.toFixed(2)} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>L/min</span></div>
+            <div className="home-flow-val">{(consumerData.flow || 0).toFixed(2)} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>L/min</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
               <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600, color: 'var(--text-muted)' }}>TOTAL BILLED</span>
-              <span className="home-flow-total">{(consumerData.total_flow).toFixed(1)} L</span>
+              <span className="home-flow-total">{((consumerData.total_flow || 0)).toFixed(1)} L</span>
             </div>
           </div>
 
           <div className="sos-reserves-card">
             <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '1rem' }}>SOS EMERGENCY RESERVES</h3>
-            <div style={{ fontSize: '2rem', fontWeight: 800 }}>{(consumerData.emergency ? 0.5 - consumerData.flow/60 : 0).toFixed(2)} L</div>
+            <div style={{ fontSize: '2rem', fontWeight: 800 }}>{(consumerData.emergency ? 0.5 - (consumerData.flow || 0)/60 : 0).toFixed(2)} L</div>
           </div>
         </div>
 
@@ -254,12 +283,12 @@ function App() {
       <div className="city-supply-grid">
         <div className="quality-card">
           <div className="quality-label">TDS LEVEL</div>
-          <div className="quality-val">{connections.gov ? govData.tds.toFixed(0) : '---'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>ppm</span></div>
+          <div className="quality-val">{connections.gov ? (govData.tds || 0).toFixed(0) : '---'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>ppm</span></div>
           <div className="status-chip">{connections.gov ? 'CONNECTED' : 'NOT CONNECTED'}</div>
         </div>
         <div className="quality-card">
           <div className="quality-label">TURBIDITY</div>
-          <div className="quality-val">{connections.gov ? govData.turbidity.toFixed(1) : '-.-'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>NTU</span></div>
+          <div className="quality-val">{connections.gov ? (govData.turbidity || 0).toFixed(1) : '-.-'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>NTU</span></div>
           <div className="status-chip" style={{ background: connections.gov ? (govData.waterStatus === 'CLEAR' || govData.turbidity < 5 ? '#dcfce7' : '#fee2e2') : 'var(--bg-main)', color: connections.gov ? (govData.waterStatus === 'CLEAR' || govData.turbidity < 5 ? '#166534' : '#991b1b') : 'inherit' }}>
             {connections.gov ? (govData.waterStatus || (govData.turbidity < 5 ? 'CLEAR' : 'DIRTY')) : 'NOT CONNECTED'}
           </div>
@@ -272,7 +301,7 @@ function App() {
       </div>
       
       {!connections.gov && (
-        <button onClick={() => connectNode('gov')} className="btn-outline" style={{ margin: '0 auto', display: 'flex', marginBottom: '2rem' }}>
+        <button onClick={() => connectNode()} className="btn-outline" style={{ margin: '0 auto', display: 'flex', marginBottom: '2rem' }}>
           <LinkIcon size={16} /> Connect Gov Node for Live Quality
         </button>
       )}
@@ -313,7 +342,7 @@ function App() {
             </div>
             
             {!connections.gov ? (
-              <button className="gov-btn-dark" onClick={() => connectNode('gov')}>
+              <button className="gov-btn-dark" onClick={() => connectNode()}>
                 <LinkIcon size={18} /> Connect Gov Node
               </button>
             ) : (
@@ -332,7 +361,7 @@ function App() {
               <div style={{ padding: '0.4rem', background: '#e0f2fe', borderRadius: '8px', color: '#0ea5e9' }}><ActivityIcon size={16} /></div>
             </div>
             <div className="gov-telemetry-value" style={{ color: '#0ea5e9' }}>
-              {govData.flow.toFixed(2)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>L/min</span>
+              {(govData.flow || 0).toFixed(2)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>L/min</span>
             </div>
           </div>
 
@@ -342,7 +371,7 @@ function App() {
               <div style={{ padding: '0.4rem', background: '#fef3c7', borderRadius: '8px', color: '#f59e0b' }}><Zap size={16} /></div>
             </div>
             <div className="gov-telemetry-value" style={{ color: '#f59e0b' }}>
-              {govData.tds.toFixed(0)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>PPM</span>
+              {(govData.tds || 0).toFixed(0)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>PPM</span>
             </div>
           </div>
 
@@ -352,7 +381,7 @@ function App() {
               <div style={{ padding: '0.4rem', background: '#dcfce7', borderRadius: '8px', color: '#10b981' }}><Waves size={16} /></div>
             </div>
             <div className="gov-telemetry-value" style={{ color: '#10b981' }}>
-              {govData.turbidity.toFixed(1)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>NTU</span>
+              {(govData.turbidity || 0).toFixed(1)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>NTU</span>
             </div>
           </div>
         </div>
@@ -371,9 +400,9 @@ function App() {
                 <div className="sm-status">{connections.ramesh ? 'Online' : 'Offline'}</div>
               </div>
               <div className="sm-badges">
-                <div className="sm-badge-green">₹{rameshBalance.toFixed(0)} +</div>
+                <div className="sm-badge-green">₹{(rameshBalance || 0).toFixed(0)} +</div>
                 {!connections.ramesh ? (
-                  <button className="sm-badge-gray" onClick={() => connectNode('ramesh')}>CONNECT</button>
+                  <button className="sm-badge-gray" onClick={() => connectNode()}>CONNECT</button>
                 ) : (
                   <button className="sm-badge-gray" onClick={() => disconnectNode('ramesh')} style={{ background: '#fee2e2', color: '#ef4444' }}>DISCONNECT</button>
                 )}
@@ -387,11 +416,11 @@ function App() {
             <div className="sm-stats-grid">
               <div>
                 <div className="sm-stat-label">FLOW RATE</div>
-                <div className="sm-stat-val">{rameshData.flow.toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L/min</span></div>
+                <div className="sm-stat-val">{(rameshData.flow || 0).toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L/min</span></div>
               </div>
               <div style={{ borderLeft: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0' }}>
                 <div className="sm-stat-label">BILLED USAGE</div>
-                <div className="sm-stat-val">{rameshData.total_flow.toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L</span></div>
+                <div className="sm-stat-val">{(rameshData.total_flow || 0).toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L</span></div>
               </div>
               <div>
                 <div className="sm-stat-label">
@@ -436,9 +465,9 @@ function App() {
                 <div className="sm-status">{connections.priya ? 'Online' : 'Offline'}</div>
               </div>
               <div className="sm-badges">
-                <div className="sm-badge-green">₹{priyaBalance.toFixed(0)} +</div>
+                <div className="sm-badge-green">₹{(priyaBalance || 0).toFixed(0)} +</div>
                 {!connections.priya ? (
-                  <button className="sm-badge-gray" onClick={() => connectNode('priya')}>CONNECT</button>
+                  <button className="sm-badge-gray" onClick={() => connectNode()}>CONNECT</button>
                 ) : (
                   <button className="sm-badge-gray" onClick={() => disconnectNode('priya')} style={{ background: '#fee2e2', color: '#ef4444' }}>DISCONNECT</button>
                 )}
@@ -452,11 +481,11 @@ function App() {
             <div className="sm-stats-grid">
               <div>
                 <div className="sm-stat-label">FLOW RATE</div>
-                <div className="sm-stat-val">{priyaData.flow.toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L/min</span></div>
+                <div className="sm-stat-val">{(priyaData.flow || 0).toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L/min</span></div>
               </div>
               <div style={{ borderLeft: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0' }}>
                 <div className="sm-stat-label">BILLED USAGE</div>
-                <div className="sm-stat-val">{priyaData.total_flow.toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L</span></div>
+                <div className="sm-stat-val">{(priyaData.total_flow || 0).toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L</span></div>
               </div>
               <div>
                 <div className="sm-stat-label">

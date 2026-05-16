@@ -64,7 +64,7 @@ void setup() {
   Wire.beginTransmission(MPU_ADDR);
   Wire.write(0x3B); // Start with register 0x3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
-  Wire.requestFrom(MPU_ADDR, 6, true);
+  Wire.requestFrom((uint8_t)MPU_ADDR, (size_t)6, true);
   if (Wire.available() == 6) {
     AcX = Wire.read() << 8 | Wire.read();
     AcY = Wire.read() << 8 | Wire.read();
@@ -137,7 +137,7 @@ void loop() {
     Wire.beginTransmission(MPU_ADDR);
     Wire.write(0x3B);
     Wire.endTransmission(false);
-    Wire.requestFrom(MPU_ADDR, 6, true);
+    Wire.requestFrom((uint8_t)MPU_ADDR, (size_t)6, true);
     if (Wire.available() == 6) {
       int16_t newAcX = Wire.read() << 8 | Wire.read();
       int16_t newAcY = Wire.read() << 8 | Wire.read();
