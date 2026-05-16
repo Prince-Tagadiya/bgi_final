@@ -67,16 +67,15 @@ void loop() {
     if (rawTurbidity < 0) rawTurbidity = 0;
     filteredTurbidity = (rawTurbidity * SENSOR_ALPHA) + (filteredTurbidity * (1.0 - SENSOR_ALPHA));
 
-    // 3. Determine Water Status
-    String status = (turbidityVoltage > 3.5) ? "CLEAR" : "DIRTY";
+    // 3. Determine Water Status (Voltage > 3.5V is typically clean for these sensors)
+    String status = (turbidityVoltage > 3.5) ? "Clean Water" : "Dirty Water";
 
     // 4. Send Data as JSON
     StaticJsonDocument<300> doc;
     doc["node"] = "government";
     doc["flow"] = flowRate;
     doc["tds"] = filteredTDS;
-    doc["turbidity"] = filteredTurbidity;
-    doc["turbidity_v"] = turbidityVoltage;
+    doc["turbidity"] = turbidityVoltage; // Send Voltage as Turbidity
     doc["waterStatus"] = status;
     doc["total_flow"] = totalLitres;
     doc["timestamp"] = millis();

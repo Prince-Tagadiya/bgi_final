@@ -393,9 +393,12 @@ function App() {
         </div>
         <div className="quality-card">
           <div className="quality-label">TURBIDITY</div>
-          <div className="quality-val">{connections.gov ? govData.turbidity.toFixed(1) : '-.-'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>NTU</span></div>
-          <div className="status-chip" style={{ background: connections.gov ? (govData.waterStatus === 'CLEAR' || govData.turbidity < 5 ? '#dcfce7' : '#fee2e2') : 'var(--bg-main)', color: connections.gov ? (govData.waterStatus === 'CLEAR' || govData.turbidity < 5 ? '#166534' : '#991b1b') : 'inherit' }}>
-            {connections.gov ? (govData.waterStatus || (govData.turbidity < 5 ? 'CLEAR' : 'DIRTY')) : 'NOT CONNECTED'}
+          <div className="quality-val">{connections.gov ? govData.turbidity.toFixed(2) : '-.-'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>V</span></div>
+          <div className="status-chip" style={{ 
+            background: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#dcfce7' : '#fee2e2') : 'var(--bg-main)', 
+            color: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#166534' : '#991b1b') : 'inherit' 
+          }}>
+            {connections.gov ? (govData.waterStatus || (govData.turbidity > 3.5 ? 'Clean Water' : 'Dirty Water')) : 'NOT CONNECTED'}
           </div>
         </div>
         <div className="quality-card" style={{ border: `1px solid ${qualityBorder}` }}>
