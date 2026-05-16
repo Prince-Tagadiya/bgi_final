@@ -205,7 +205,8 @@ function App() {
     }
   };
 
-  const renderConsumerView = (name, nodeKey, consumerData) => {
+  // --- Sub-components for stable routing ---
+  const ConsumerDashboard = ({ name, nodeKey, consumerData }) => {
     let waterQualityStatus = "SENSOR ERROR";
     let waterQualityNote = "CHECK SENSORS";
     let qualityBorder = "#fef08a";
@@ -213,13 +214,13 @@ function App() {
     let noteColor = "#92400e";
 
     if (connections.gov) {
-      if (govData.tds < 300 && govData.turbidity < 5.0) {
+      if (govData.tds < 300 && govData.turbidity < 3.5) {
         waterQualityStatus = "EXCELLENT";
         waterQualityNote = "Safe for Drinking";
         qualityBorder = "#86efac"; 
         noteBg = "#dcfce7";
         noteColor = "#166534";
-      } else if (govData.tds < 600 && govData.turbidity < 10.0) {
+      } else if (govData.tds < 600 && govData.turbidity < 4.0) {
         waterQualityStatus = "GOOD";
         waterQualityNote = "Acceptable Quality";
         qualityBorder = "#7dd3fc"; 
@@ -240,189 +241,170 @@ function App() {
       }
     }
 
+    const currentBalance = nodeKey === 'ramesh' ? rameshBalance : priyaBalance;
+
     return (
-    <div className="consumer-only-page">
-    <div className="app-container">
-      {/* Header Profile */}
-      <div className="consumer-header">
-        <div>
-          <p className="greeting-text">GOOD MORNING,</p>
-          <h1 className="user-name">{name}</h1>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn-outline" style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }}>
-            Logout
-          </button>
-        </div>
-      </div>
-
-      {/* Balance Card */}
-      <div className="balance-card">
-        <div className="balance-header">
-          <span className="balance-label"><Droplets size={16} /> CURRENT BALANCE</span>
-          <button className="recharge-btn" onClick={() => setPaymentModal({ isOpen: true, consumer: nodeKey, amount: 100 })}>
-            <Zap size={16} fill="currentColor" /> Recharge Now
-          </button>
-        </div>
-        <div className="balance-amount">₹{ (nodeKey === 'ramesh' ? rameshBalance : priyaBalance).toFixed(2) }</div>
-        <div className="billing-rate">Billing Rate: ₹2/L</div>
-        
-        <div className="usage-stats">
-          <div className="usage-box">
-            <div className="usage-box-label">TODAY'S USAGE</div>
-            <div className="usage-box-val">{(consumerData.total_flow).toFixed(0)} L</div>
-          </div>
-          <div className="usage-box">
-            <div className="usage-box-label">MONTHLY USAGE (EST.)</div>
-            <div className="usage-box-val">{(consumerData.total_flow * 30).toFixed(0)} L</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Connection Status Banner */}
-      {!connections[nodeKey] && (
-        <div style={{ background: '#334155', color: '#94a3b8', padding: '1.5rem', borderRadius: '16px', display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '2rem', borderLeft: '4px solid #ef4444' }}>
-          <Power size={24} />
-          <div>
-            <h4 style={{ color: 'white', marginBottom: '0.25rem' }}>HARDWARE OFFLINE</h4>
-            <p style={{ fontSize: '0.875rem' }}>Connection to your smart meter via serial cable is missing. Please click 'Connect Hardware' below.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Valve Controls */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h2 className="section-title">🏡 My Water System</h2>
-        {!connections[nodeKey] ? 
-          <button onClick={() => connectNode()} className="btn-outline">Connect Hardware</button> :
-          <button onClick={() => disconnectNode(nodeKey)} className="btn-outline" style={{ color: 'red' }}>Disconnect</button>
-        }
-      </div>
-
-      <div className="valve-control-card">
-        <div className="valve-info">
-          <div className="valve-label">MAIN VALVE</div>
-          <div className="valve-status">{connections[nodeKey] ? (consumerData.valve ? 'Active' : 'Closed') : 'Device Offline'}</div>
-        </div>
-        <button onClick={() => sendCommand(nodeKey, 'TRIGGER_SOS')} className="btn-sos">
-          <AlertTriangle size={18} /> SOS
-        </button>
-        <button 
-          onClick={() => {
-            if (nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) return;
-            if (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper)) return;
-            sendCommand(nodeKey, consumerData.valve ? 'VALVE_OFF' : 'VALVE_ON');
-          }} 
-          className={`btn-valve ${!consumerData.valve ? 'closed' : ''}`}
-          style={{ 
-            opacity: ((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
-                      (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) ? 0.5 : 1, 
-            cursor: ((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
-                     (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) ? 'not-allowed' : 'pointer' 
-          }}
-          disabled={((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
-                     (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper)))}
-        >
-          {((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
-            (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) 
-            ? 'LOCKED BY GOV' 
-            : (consumerData.valve ? 'CLOSE' : 'OPEN')}
-        </button>
-      </div>
-
-      {/* Flow & Trends */}
-      <div className="grid-2">
-        <div>
-          <div className="white-card" style={{ marginBottom: '1.5rem' }}>
-            <h3 className="section-title" style={{ fontSize: '0.875rem', textTransform: 'uppercase', color: 'var(--color-info)' }}>
-              <Droplets size={16} /> CURRENT HOME FLOW
-            </h3>
-            <div className="home-flow-val">{consumerData.flow.toFixed(2)} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>L/min</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
-              <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600, color: 'var(--text-muted)' }}>TOTAL BILLED</span>
-              <span className="home-flow-total">{(consumerData.total_flow).toFixed(1)} L</span>
+      <div className="consumer-only-page">
+        <div className="app-container">
+          <div className="consumer-header">
+            <div>
+              <p className="greeting-text">GOOD MORNING,</p>
+              <h1 className="user-name">{name}</h1>
+            </div>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button className="btn-outline" style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }}>
+                Logout
+              </button>
             </div>
           </div>
 
-          <div className="sos-reserves-card">
-            <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '1rem' }}>SOS EMERGENCY RESERVES</h3>
-            {nodeKey === 'ramesh' ? (
-              <>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{(consumerData.sos_used || 0).toFixed(2)} L / {(consumerData.sos_limit || 0.5).toFixed(1)} L</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
-                  Pending: {((consumerData.sos_limit || 0.5) - (consumerData.sos_used || 0)).toFixed(2)} Litres
+          <div className="balance-card">
+            <div className="balance-header">
+              <span className="balance-label"><Droplets size={16} /> CURRENT BALANCE</span>
+              <button className="recharge-btn" onClick={() => setPaymentModal({ isOpen: true, consumer: nodeKey, amount: 100 })}>
+                <Zap size={16} fill="currentColor" /> Recharge Now
+              </button>
+            </div>
+            <div className="balance-amount">₹{ currentBalance.toFixed(2) }</div>
+            <div className="billing-rate">Billing Rate: ₹2/L</div>
+            
+            <div className="usage-stats">
+              <div className="usage-box">
+                <div className="usage-box-label">TODAY'S USAGE</div>
+                <div className="usage-box-val">{(consumerData.total_flow).toFixed(0)} L</div>
+              </div>
+              <div className="usage-box">
+                <div className="usage-box-label">MONTHLY USAGE (EST.)</div>
+                <div className="usage-box-val">{(consumerData.total_flow * 30).toFixed(0)} L</div>
+              </div>
+            </div>
+          </div>
+
+          {!connections[nodeKey] && (
+            <div style={{ background: '#334155', color: '#94a3b8', padding: '1.5rem', borderRadius: '16px', display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '2rem', borderLeft: '4px solid #ef4444' }}>
+              <Power size={24} />
+              <div>
+                <h4 style={{ color: 'white', marginBottom: '0.25rem' }}>HARDWARE OFFLINE</h4>
+                <p style={{ fontSize: '0.875rem' }}>Connection to your smart meter via serial cable is missing. Please click 'Connect Hardware' below.</p>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 className="section-title">🏡 My Water System</h2>
+            {!connections[nodeKey] ? 
+              <button onClick={() => connectNode()} className="btn-outline">Connect Hardware</button> :
+              <button onClick={() => disconnectNode(nodeKey)} className="btn-outline" style={{ color: 'red' }}>Disconnect</button>
+            }
+          </div>
+
+          <div className="valve-control-card">
+            <div className="valve-info">
+              <div className="valve-label">MAIN VALVE</div>
+              <div className="valve-status">{connections[nodeKey] ? (consumerData.valve ? 'Active' : 'Closed') : 'Device Offline'}</div>
+            </div>
+            <button onClick={() => sendCommand(nodeKey, 'TRIGGER_SOS')} className="btn-sos">
+              <AlertTriangle size={18} /> SOS
+            </button>
+            <button 
+              onClick={() => {
+                if (nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) return;
+                if (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper)) return;
+                sendCommand(nodeKey, consumerData.valve ? 'VALVE_OFF' : 'VALVE_ON');
+              }} 
+              className={`btn-valve ${!consumerData.valve ? 'closed' : ''}`}
+              style={{ 
+                opacity: ((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+                          (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) ? 0.5 : 1, 
+                cursor: ((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+                         (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) ? 'not-allowed' : 'pointer' 
+              }}
+              disabled={((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+                         (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper)))}
+            >
+              {((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+                (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) 
+                ? 'LOCKED BY GOV' 
+                : (consumerData.valve ? 'CLOSE' : 'OPEN')}
+            </button>
+          </div>
+
+          <div className="grid-2">
+            <div>
+              <div className="white-card" style={{ marginBottom: '1.5rem' }}>
+                <h3 className="section-title" style={{ fontSize: '0.875rem', textTransform: 'uppercase', color: 'var(--color-info)' }}>
+                  <Droplets size={16} /> CURRENT HOME FLOW
+                </h3>
+                <div className="home-flow-val">{consumerData.flow.toFixed(2)} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>L/min</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600, color: 'var(--text-muted)' }}>TOTAL BILLED</span>
+                  <span className="home-flow-total">{(consumerData.total_flow).toFixed(1)} L</span>
                 </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{consumerData.sos_sec_left || 60} SECONDS</div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
-                  Status: {consumerData.emergency ? 'Emergency Water Flowing' : 'Quota Ready (1 Min)'}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+              </div>
 
-        <div className="white-card">
-          <h3 className="section-title" style={{ fontSize: '0.875rem', textTransform: 'uppercase', color: '#8b5cf6' }}>
-            <Activity size={16} /> USAGE TREND
-          </h3>
-          <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '12px' }}>
-            Connect node to plot real-time usage graph
+              <div className="sos-reserves-card">
+                <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '1rem' }}>SOS EMERGENCY RESERVES</h3>
+                {nodeKey === 'ramesh' ? (
+                  <>
+                    <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{(consumerData.sos_used || 0).toFixed(2)} L / {(consumerData.sos_limit || 0.5).toFixed(1)} L</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
+                      Pending: {((consumerData.sos_limit || 0.5) - (consumerData.sos_used || 0)).toFixed(2)} Litres
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{consumerData.sos_sec_left || 60} SECONDS</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
+                      Status: {consumerData.emergency ? 'Emergency Water Flowing' : 'Quota Ready (1 Min)'}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="white-card">
+              <h3 className="section-title" style={{ fontSize: '0.875rem', textTransform: 'uppercase', color: '#8b5cf6' }}>
+                <Activity size={16} /> USAGE TREND
+              </h3>
+              <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '12px' }}>
+                Connect node to plot real-time usage graph
+              </div>
+            </div>
+          </div>
+
+          <h2 className="section-title" style={{ marginTop: '3rem' }}>
+            🏙️ City Supply <span style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', marginLeft: '0.5rem' }}>LIVE QUALITY</span>
+          </h2>
+          <div className="city-supply-grid">
+            <div className="quality-card">
+              <div className="quality-label">TDS LEVEL</div>
+              <div className="quality-val">{connections.gov ? govData.tds.toFixed(0) : '---'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>ppm</span></div>
+              <div className="status-chip">{connections.gov ? 'CONNECTED' : 'NOT CONNECTED'}</div>
+            </div>
+            <div className="quality-card">
+              <div className="quality-label">TURBIDITY</div>
+              <div className="quality-val">{connections.gov ? govData.turbidity.toFixed(2) : '-.-'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>V</span></div>
+              <div className="status-chip" style={{ 
+                background: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#dcfce7' : '#fee2e2') : 'var(--bg-main)', 
+                color: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#166534' : '#991b1b') : 'inherit' 
+              }}>
+                {connections.gov ? (govData.waterStatus || (govData.turbidity > 3.5 ? 'Clean Water' : 'Dirty Water')) : 'NOT CONNECTED'}
+              </div>
+            </div>
+            <div className="quality-card" style={{ border: `1px solid ${qualityBorder}` }}>
+              <div className="quality-label">OVERALL QUALITY</div>
+              <div className="quality-val" style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>{waterQualityStatus}</div>
+              <div style={{ background: noteBg, color: noteColor, padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 700, alignSelf: 'flex-start', fontSize: '0.875rem' }}>{waterQualityNote}</div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* City Supply Status */}
-      <h2 className="section-title" style={{ marginTop: '3rem' }}>
-        🏙️ City Supply <span style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', marginLeft: '0.5rem' }}>LIVE QUALITY</span>
-      </h2>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Rau Pumping Station (BGI Indore Area)</h3>
-        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-          <MapPin size={12} /> {connections.gov ? 'ONLINE' : 'OFFLINE'}
-        </span>
-      </div>
-
-      <div className="city-supply-grid">
-        <div className="quality-card">
-          <div className="quality-label">TDS LEVEL</div>
-          <div className="quality-val">{connections.gov ? govData.tds.toFixed(0) : '---'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>ppm</span></div>
-          <div className="status-chip">{connections.gov ? 'CONNECTED' : 'NOT CONNECTED'}</div>
-        </div>
-        <div className="quality-card">
-          <div className="quality-label">TURBIDITY</div>
-          <div className="quality-val">{connections.gov ? govData.turbidity.toFixed(2) : '-.-'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>V</span></div>
-          <div className="status-chip" style={{ 
-            background: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#dcfce7' : '#fee2e2') : 'var(--bg-main)', 
-            color: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#166534' : '#991b1b') : 'inherit' 
-          }}>
-            {connections.gov ? (govData.waterStatus || (govData.turbidity > 3.5 ? 'Clean Water' : 'Dirty Water')) : 'NOT CONNECTED'}
-          </div>
-        </div>
-        <div className="quality-card" style={{ border: `1px solid ${qualityBorder}` }}>
-          <div className="quality-label">OVERALL QUALITY</div>
-          <div className="quality-val" style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>{waterQualityStatus}</div>
-          <div style={{ background: noteBg, color: noteColor, padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 700, alignSelf: 'flex-start', fontSize: '0.875rem' }}>{waterQualityNote}</div>
-        </div>
-      </div>
-      
-      {!connections.gov && (
-        <button onClick={() => connectNode()} className="btn-outline" style={{ margin: '0 auto', display: 'flex', marginBottom: '2rem' }}>
-          <LinkIcon size={16} /> Connect Gov Node for Live Quality
-        </button>
-      )}
-
-    </div>
-    </div>
     );
   };
 
-  const renderGovView = () => (
+  const GovDashboard = () => (
     <div className="gov-body">
       <div className="app-container">
-        
         {isTheft && (
           <div style={{ background: '#fee2e2', border: '2px solid #ef4444', color: '#b91c1c', padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <AlertTriangle size={32} />
@@ -490,7 +472,7 @@ function App() {
               <div style={{ padding: '0.4rem', background: '#dcfce7', borderRadius: '8px', color: '#10b981' }}><Waves size={16} /></div>
             </div>
             <div className="gov-telemetry-value" style={{ color: '#10b981' }}>
-              {govData.turbidity.toFixed(1)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>NTU</span>
+              {govData.turbidity.toFixed(2)} <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>V</span>
             </div>
           </div>
         </div>
@@ -500,7 +482,6 @@ function App() {
         </h2>
         
         <div className="gov-consumer-grid">
-          
           {/* Ramesh Card */}
           <div className="smart-meter-card" style={{ 
             border: rameshData.tamper || rameshLeak || rameshData.emergency ? '2px solid #ef4444' : '1px solid #e2e8f0',
@@ -508,7 +489,7 @@ function App() {
           }}>
             <div className="sm-card-top">
               <div>
-                <div className="sm-name">Ramesh Kumar (Umaria, near BGI)</div>
+                <div className="sm-name">Ramesh Kumar (Indore West)</div>
                 <div className="sm-status">{connections.ramesh ? 'Online' : 'Offline'}</div>
               </div>
               <div className="sm-badges">
@@ -664,25 +645,25 @@ function App() {
               </button>
             )}
           </div>
-
         </div>
       </div>
+    </div>
+  );</div>
     </div>
     );
 
   return (
     <>
       <Routes>
-      <Route path="/gov" element={renderGovView()} />
-      <Route path="/consumer/ramesh" element={renderConsumerView("Ramesh Kumar", "ramesh", rameshData)} />
-      <Route path="/consumer/priya" element={renderConsumerView("Priya Singh", "priya", priyaData)} />
-      
-      <Route path="*" element={renderGovView()} />
+        <Route path="/gov" element={<GovDashboard />} />
+        <Route path="/consumer/ramesh" element={<ConsumerDashboard name="Ramesh Kumar" nodeKey="ramesh" consumerData={rameshData} />} />
+        <Route path="/consumer/priya" element={<ConsumerDashboard name="Priya Singh" nodeKey="priya" consumerData={priyaData} />} />
+        <Route path="*" element={<GovDashboard />} />
       </Routes>
     
       {/* Payment Modal Overlay */}
       {paymentModal.isOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
           <div style={{ background: 'white', padding: '2.5rem', borderRadius: '24px', width: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }}>
             <div style={{ background: '#e0e7ff', color: '#4f46e5', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
               <Zap size={32} fill="currentColor" />
