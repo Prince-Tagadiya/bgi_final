@@ -13,6 +13,10 @@ function App() {
   const [priyaData, setPriyaData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, emergency_used: 0 });
 
   const [connections, setConnections] = useState({ gov: false, ramesh: false, priya: false });
+  const [rameshRecharges, setRameshRecharges] = useState(0);
+  const [priyaRecharges, setPriyaRecharges] = useState(0);
+  const [manualBlock, setManualBlock] = useState({ ramesh: false, priya: false });
+  const [paymentModal, setPaymentModal] = useState({ isOpen: false, consumer: null, amount: 100 });
   
   const portsRef = useRef({ gov: null, ramesh: null, priya: null });
   const readersRef = useRef({ gov: null, ramesh: null, priya: null });
@@ -24,10 +28,10 @@ function App() {
   const isTheft = govData.flow > 0.5 && (rameshData.flow + priyaData.flow) < 0.1 && (!rameshData.valve || !priyaData.valve);
 
   // Balance Management (Accelerated for hackathon demo: starts at Rs 10 instead of 500)
-  const rameshBalance = 10 - (rameshData.total_flow * 2);
-  const priyaBalance = 10 - (priyaData.total_flow * 2);
-  const isRameshBlocked = rameshBalance <= 0 && !rameshData.emergency;
-  const isPriyaBlocked = priyaBalance <= 0 && !priyaData.emergency;
+  const rameshBalance = 10 + rameshRecharges - (rameshData.total_flow * 2);
+  const priyaBalance = 10 + priyaRecharges - (priyaData.total_flow * 2);
+  const isRameshBlocked = (rameshBalance <= 0 && !rameshData.emergency) || manualBlock.ramesh;
+  const isPriyaBlocked = (priyaBalance <= 0 && !priyaData.emergency) || manualBlock.priya;
 
   useEffect(() => {
     if (connections.ramesh && isRameshBlocked && rameshData.valve) {
@@ -105,7 +109,7 @@ function App() {
     }
   };
 
-  const renderConsumerView = (name, nodeKey, consumerData) => {
+  const renderConsumerView = (name, nodeKey, consumerData, isBlocked) => {
     let waterQualityStatus = "SENSOR ERROR";
     let waterQualityNote = "CHECK SENSORS";
     let qualityBorder = "#fef08a";
@@ -159,9 +163,11 @@ function App() {
       <div className="balance-card">
         <div className="balance-header">
           <span className="balance-label"><Droplets size={16} /> CURRENT BALANCE</span>
-          <button className="recharge-btn"><Zap size={16} fill="currentColor" /> Recharge Now</button>
+          <button className="recharge-btn" onClick={() => setPaymentModal({ isOpen: true, consumer: nodeKey, amount: 100 })}>
+            <Zap size={16} fill="currentColor" /> Recharge Now
+          </button>
         </div>
-        <div className="balance-amount">₹{ (10 - consumerData.total_flow * 2).toFixed(2) }</div>
+        <div className="balance-amount">₹{ (nodeKey === 'ramesh' ? rameshBalance : priyaBalance).toFixed(2) }</div>
         <div className="billing-rate">Billing Rate: ₹2/L</div>
         
         <div className="usage-stats">
@@ -204,8 +210,15 @@ function App() {
         <button onClick={() => sendCommand(nodeKey, 'TRIGGER_SOS')} className="btn-sos">
           <AlertTriangle size={18} /> SOS
         </button>
-        <button onClick={() => sendCommand(nodeKey, consumerData.valve ? 'VALVE_OFF' : 'VALVE_ON')} 
-                className={`btn-valve ${!consumerData.valve ? 'closed' : ''}`}>
+        <button onClick={() => {
+          if (isBlocked && !consumerData.valve) {
+            alert("ACCESS DENIED: Your water supply is administratively blocked by JAL BOARD.");
+            return;
+          }
+          sendCommand(nodeKey, consumerData.valve ? 'VALVE_OFF' : 'VALVE_ON');
+        }} 
+                className={`btn-valve ${!consumerData.valve ? 'closed' : ''}`}
+                style={{ opacity: (isBlocked && !consumerData.valve) ? 0.5 : 1, cursor: (isBlocked && !consumerData.valve) ? 'not-allowed' : 'pointer' }}>
           {consumerData.valve ? 'CLOSE' : 'OPEN'}
         </button>
       </div>
@@ -371,7 +384,7 @@ function App() {
                 <div className="sm-status">{connections.ramesh ? 'Online' : 'Offline'}</div>
               </div>
               <div className="sm-badges">
-                <div className="sm-badge-green">₹{rameshBalance.toFixed(0)} +</div>
+                <div className="sm-badge-green">₹{rameshBalance.toFixed(0)}</div>
                 {!connections.ramesh ? (
                   <button className="sm-badge-gray" onClick={() => connectNode('ramesh')}>CONNECT</button>
                 ) : (
@@ -382,7 +395,7 @@ function App() {
 
             {rameshData.tamper && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>METER REMOVED / TAMPERED! VALVE LOCKED</div>}
             {rameshLeak && <div style={{ background: '#fef3c7', color: '#92400e', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>LEAKAGE / PIPE CUT DETECTED! (Flow Drop)</div>}
-            {isRameshBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
+            {isRameshBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>{manualBlock.ramesh ? 'MANUALLY BLOCKED BY ADMIN' : 'PAYMENT PENDING - VALVE AUTO BLOCKED'}</div>}
 
             <div className="sm-stats-grid">
               <div>
@@ -410,13 +423,13 @@ function App() {
             </div>
 
             <div className="sm-btn-row">
-              <button className="sm-btn sm-btn-block" onClick={() => sendCommand('ramesh', 'VALVE_OFF')}>
+              <button className="sm-btn sm-btn-block" onClick={() => { sendCommand('ramesh', 'VALVE_OFF'); setManualBlock(prev => ({ ...prev, ramesh: true })); }}>
                 <AlertOctagon size={16} /> Block User
               </button>
               <button className="sm-btn sm-btn-sos" onClick={() => sendCommand('ramesh', 'TRIGGER_SOS')}>
                 SOS EMERGENCY
               </button>
-              <button className={`sm-btn ${rameshData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => sendCommand('ramesh', rameshData.valve ? 'VALVE_OFF' : 'VALVE_ON')}>
+              <button className={`sm-btn ${rameshData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => { sendCommand('ramesh', rameshData.valve ? 'VALVE_OFF' : 'VALVE_ON'); if (!rameshData.valve) setManualBlock(prev => ({ ...prev, ramesh: false })); }}>
                 {rameshData.valve ? 'CLOSE VALVE' : 'OPEN VALVE'}
               </button>
             </div>
@@ -436,7 +449,7 @@ function App() {
                 <div className="sm-status">{connections.priya ? 'Online' : 'Offline'}</div>
               </div>
               <div className="sm-badges">
-                <div className="sm-badge-green">₹{priyaBalance.toFixed(0)} +</div>
+                <div className="sm-badge-green">₹{priyaBalance.toFixed(0)}</div>
                 {!connections.priya ? (
                   <button className="sm-badge-gray" onClick={() => connectNode('priya')}>CONNECT</button>
                 ) : (
@@ -447,7 +460,7 @@ function App() {
 
             {priyaData.tamper && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>METER REMOVED / TAMPERED! VALVE LOCKED</div>}
             {priyaLeak && <div style={{ background: '#fef3c7', color: '#92400e', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>LEAKAGE / PIPE CUT DETECTED! (Flow Drop)</div>}
-            {isPriyaBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
+            {isPriyaBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>{manualBlock.priya ? 'MANUALLY BLOCKED BY ADMIN' : 'PAYMENT PENDING - VALVE AUTO BLOCKED'}</div>}
 
             <div className="sm-stats-grid">
               <div>
@@ -475,13 +488,13 @@ function App() {
             </div>
 
             <div className="sm-btn-row">
-              <button className="sm-btn sm-btn-block" onClick={() => sendCommand('priya', 'VALVE_OFF')}>
+              <button className="sm-btn sm-btn-block" onClick={() => { sendCommand('priya', 'VALVE_OFF'); setManualBlock(prev => ({ ...prev, priya: true })); }}>
                 <AlertOctagon size={16} /> Block User
               </button>
               <button className="sm-btn sm-btn-sos" onClick={() => sendCommand('priya', 'TRIGGER_SOS')}>
                 SOS EMERGENCY
               </button>
-              <button className={`sm-btn ${priyaData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => sendCommand('priya', priyaData.valve ? 'VALVE_OFF' : 'VALVE_ON')}>
+              <button className={`sm-btn ${priyaData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => { sendCommand('priya', priyaData.valve ? 'VALVE_OFF' : 'VALVE_ON'); if (!priyaData.valve) setManualBlock(prev => ({ ...prev, priya: false })); }}>
                 {priyaData.valve ? 'CLOSE VALVE' : 'OPEN VALVE'}
               </button>
             </div>
@@ -499,13 +512,54 @@ function App() {
   );
 
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route path="/gov" element={renderGovView()} />
-      <Route path="/consumer/ramesh" element={renderConsumerView("Ramesh Kumar", "ramesh", rameshData)} />
-      <Route path="/consumer/priya" element={renderConsumerView("Priya Singh", "priya", priyaData)} />
+      <Route path="/consumer/ramesh" element={renderConsumerView("Ramesh Kumar", "ramesh", rameshData, isRameshBlocked)} />
+      <Route path="/consumer/priya" element={renderConsumerView("Priya Singh", "priya", priyaData, isPriyaBlocked)} />
       
       <Route path="*" element={renderGovView()} />
-    </Routes>
+      </Routes>
+    
+      {/* Payment Modal Overlay */}
+      {paymentModal.isOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: '2.5rem', borderRadius: '24px', width: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }}>
+            <div style={{ background: '#e0e7ff', color: '#4f46e5', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+              <Zap size={32} fill="currentColor" />
+            </div>
+            <h2 style={{ marginBottom: '0.5rem', fontSize: '1.5rem', fontWeight: 800 }}>Recharge Smart Meter</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.875rem' }}>Select amount to securely recharge your JAL BOARD wallet.</p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '2rem' }}>
+              {[50, 100, 200, 500].map(amt => (
+                <button key={amt} onClick={() => setPaymentModal(prev => ({ ...prev, amount: amt }))} 
+                        style={{ padding: '1rem', borderRadius: '12px', border: paymentModal.amount === amt ? '2px solid var(--color-primary)' : '1px solid #e2e8f0', background: paymentModal.amount === amt ? '#e0e7ff' : 'white', color: paymentModal.amount === amt ? '#4f46e5' : '#0f172a', cursor: 'pointer', fontWeight: 800, fontSize: '1.125rem', transition: 'all 0.2s' }}>
+                  ₹{amt}
+                </button>
+              ))}
+            </div>
+            
+            <button onClick={() => {
+              if (paymentModal.consumer === 'ramesh') {
+                setRameshRecharges(prev => prev + paymentModal.amount);
+                if (isRameshBlocked) sendCommand('ramesh', 'VALVE_ON');
+              } else {
+                setPriyaRecharges(prev => prev + paymentModal.amount);
+                if (isPriyaBlocked) sendCommand('priya', 'VALVE_ON');
+              }
+              setPaymentModal({ isOpen: false, consumer: null, amount: 100 });
+            }} style={{ background: 'var(--color-primary)', color: 'white', border: 'none', padding: '1rem', width: '100%', borderRadius: '12px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', marginBottom: '1rem', transition: 'opacity 0.2s' }}>
+              Pay ₹{paymentModal.amount} Securely
+            </button>
+            <button onClick={() => setPaymentModal({ isOpen: false, consumer: null, amount: 100 })} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+    </>
   );
 }
 
