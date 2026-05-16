@@ -10,7 +10,7 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 function App() {
   const [govData, setGovData] = useState({ flow: 0, tds: 0, turbidity: 0, total_flow: 0 });
   const [rameshData, setRameshData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, sos_used: 0, sos_limit: 0.5 });
-  const [priyaData, setPriyaData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, sos_used: 0, sos_limit: 0.8 });
+  const [priyaData, setPriyaData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, sos_sec_left: 60 });
 
   const [connections, setConnections] = useState({ gov: false, ramesh: false, priya: false });
   const [rameshRecharges, setRameshRecharges] = useState(0);
@@ -25,13 +25,12 @@ function App() {
   const theftTimerRef = useRef(null);
 
   // Theft & Leakage Detection Logic
-  // Leakage / Cut Pipe: If Gov says water is flowing fast, but Consumer says valve is open and 0 flow.
   const rameshLeak = connections.ramesh && rameshData.valve && govData.flow > 0.05 && rameshData.flow < 0.01;
-  const priyaLeak = connections.priya && priyaData.valve && govData.flow > 0.05 && priyaData.flow < 0.01;
+  const priyaLeak = false; // No flow sensor for Priya, so no leak detection possible via sensor
 
   useEffect(() => {
-    // New Theft Logic: Gov > 0 and (Ramesh + Priya) == 0 for 5 seconds
-    const conditionMet = govData.flow > 0.05 && (rameshData.flow + priyaData.flow) < 0.01;
+    // New Theft Logic: Gov > 0 and Ramesh == 0 for 5 seconds (Priya excluded as she has no sensor)
+    const conditionMet = govData.flow > 0.05 && rameshData.flow < 0.01;
 
     if (conditionMet) {
       if (!theftTimerRef.current) {
@@ -347,10 +346,21 @@ function App() {
 
           <div className="sos-reserves-card">
             <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '1rem' }}>SOS EMERGENCY RESERVES</h3>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{(consumerData.sos_used || 0).toFixed(2)} L / {(consumerData.sos_limit || 0.5).toFixed(1)} L</div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
-              Pending: {((consumerData.sos_limit || 0.5) - (consumerData.sos_used || 0)).toFixed(2)} Litres
-            </div>
+            {nodeKey === 'ramesh' ? (
+              <>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{(consumerData.sos_used || 0).toFixed(2)} L / {(consumerData.sos_limit || 0.5).toFixed(1)} L</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
+                  Pending: {((consumerData.sos_limit || 0.5) - (consumerData.sos_used || 0)).toFixed(2)} Litres
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{consumerData.sos_sec_left || 60} SECONDS</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
+                  Status: {consumerData.emergency ? 'Emergency Water Flowing' : 'Quota Ready (1 Min)'}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -608,7 +618,7 @@ function App() {
                 <div className="sm-stat-label">
                   <span style={{ background: '#ef4444', color: 'white', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.5rem' }}>SOS</span> EMERGENCY
                 </div>
-                <div className="sm-stat-val">{(priyaData.sos_used || 0).toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>/ {(priyaData.sos_limit || 0.8).toFixed(1)} L</span></div>
+                <div className="sm-stat-val">{priyaData.sos_sec_left || 60} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>SEC LEFT</span></div>
               </div>
             </div>
 
@@ -645,9 +655,9 @@ function App() {
                 RESET TAMPER LOCK
               </button>
             )}
-            {(priyaData.sos_used > 0 || priyaData.emergency) && (
+            {priyaData.emergency && (
               <button className="sm-btn" style={{ marginTop: '0.5rem', width: '100%', background: '#fee2e2', color: '#ef4444', borderColor: '#fca5a5' }} onClick={() => sendCommand('priya', 'RESET_SOS')}>
-                RESET SOS QUOTA
+                RESET SOS TIMER
               </button>
             )}
           </div>

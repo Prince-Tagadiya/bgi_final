@@ -24,8 +24,8 @@ const float FLOW_CALIBRATION = 7.5; // Flow sensor calibration factor
 bool valveState = true;
 float waterLimit = 0.0; 
 bool emergencyMode = false;
-float sosUsed = 0.0;
-float sosLimit = 0.8; // 0.8 Litres for Priya demo
+unsigned long sosStartTime = 0;
+const unsigned long SOS_DURATION = 60000; // 1 minute for Priya demo
 
 // Tamper (MPU6050 simplified I2C reading)
 const int MPU_ADDR = 0x68;
@@ -47,13 +47,12 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(EMERGENCY_LED_PIN, OUTPUT);
   pinMode(EMERGENCY_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(FLOW_SENSOR_PIN, INPUT_PULLUP);
   
   digitalWrite(RELAY_PIN, LOW); // Relay ON (Valve Open)
   digitalWrite(EMERGENCY_LED_PIN, LOW); // LED OFF
 
-  // Attach flow sensor interrupt
-  attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING);
+  // No flow sensor for Priya nodes
+  // attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING);
 
   // Initialize MPU6050
   Wire.beginTransmission(MPU_ADDR);
@@ -95,12 +94,12 @@ void loop() {
     } else if (command == "RESET_FLOW") {
       totalLitres = 0.0;
     } else if (command == "RESET_SOS") {
-      sosUsed = 0.0;
       emergencyMode = false;
       digitalWrite(EMERGENCY_LED_PIN, LOW);
     } else if (command == "TRIGGER_SOS") {
       if (isTampered) return;
       emergencyMode = !emergencyMode;
+      if (emergencyMode) sosStartTime = millis();
       valveState = emergencyMode ? true : valveState; 
       digitalWrite(RELAY_PIN, valveState ? LOW : HIGH);
       digitalWrite(EMERGENCY_LED_PIN, emergencyMode ? HIGH : LOW);
@@ -112,35 +111,26 @@ void loop() {
     lastButtonPress = currentTime;
     if (isTampered) return;
     emergencyMode = !emergencyMode;
+    if (emergencyMode) sosStartTime = millis();
     valveState = emergencyMode ? true : valveState;
     digitalWrite(RELAY_PIN, valveState ? LOW : HIGH);
     digitalWrite(EMERGENCY_LED_PIN, emergencyMode ? HIGH : LOW);
   }
 
-  // 3. Water Limit Logic (Priya: Volume Based)
-  if (emergencyMode && sosUsed >= sosLimit) {
+  // 3. Water Limit Logic (Priya: 1 Min Timer)
+  if (emergencyMode && (currentTime - sosStartTime >= SOS_DURATION)) {
     emergencyMode = false;
     valveState = false;
     digitalWrite(RELAY_PIN, HIGH);
     digitalWrite(EMERGENCY_LED_PIN, LOW);
   }
 
-  // 4. Read Flow Sensor (Every 500ms)
+  // 4. Update Telemetry (Every 500ms)
   if ((currentTime - oldTime) > 500) {
-    detachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN));
-    flowRate = ((1000.0 / (currentTime - oldTime)) * pulseCount) / FLOW_CALIBRATION;
     oldTime = currentTime;
-    
-    float addedLitres = (flowRate / 60.0) * 0.5; // Every 500ms
-
-    if (emergencyMode) {
-      sosUsed += addedLitres;
-    } else {
-      totalLitres += addedLitres;
-    }
-    
-    pulseCount = 0;
-    attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING);
+    flowRate = 0.0;
+    totalLitres = 0.0;
+    // pulseCount = 0; // Not used for Priya node
 
     // 5. Tamper Detection via MPU6050
     Wire.beginTransmission(MPU_ADDR);
@@ -173,8 +163,11 @@ void loop() {
     doc["valve"] = valveState;
     doc["tamper"] = isTampered;
     doc["emergency"] = emergencyMode;
-    doc["sos_used"] = sosUsed;
-    doc["sos_limit"] = sosLimit;
+    if (emergencyMode) {
+      doc["sos_sec_left"] = (SOS_DURATION - (currentTime - sosStartTime)) / 1000;
+    } else {
+      doc["sos_sec_left"] = 60;
+    }
     
     serializeJson(doc, Serial);
     Serial.println();
