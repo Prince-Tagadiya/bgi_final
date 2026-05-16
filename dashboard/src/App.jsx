@@ -33,46 +33,86 @@ function App() {
   const isRameshBlocked = rameshBalance <= 0 && !rameshData.emergency;
   const isPriyaBlocked = priyaBalance <= 0 && !priyaData.emergency;
 
-  useEffect(() => {
-    if (connections.ramesh && isRameshBlocked && rameshData.valve) {
-      sendCommand('ramesh', 'VALVE_OFF');
-    }
-    if (connections.priya && isPriyaBlocked && priyaData.valve) {
-      sendCommand('priya', 'VALVE_OFF');
-    }
-  }, [isRameshBlocked, rameshData.valve, connections.ramesh, isPriyaBlocked, priyaData.valve, connections.priya]);
+  // --- Cross-Tab Synchronization (BroadcastChannel) ---
+  const bc = useRef(new BroadcastChannel('bgi_sync'));
 
-  const connectNode = async (node) => {
+  useEffect(() => {
+    bc.current.onmessage = (event) => {
+      const { type, node, data, cmd } = event.data;
+      if (type === 'DATA_UPDATE') {
+        if (node === 'gov') setGovData(prev => ({ ...prev, ...data }));
+        else if (node === 'ramesh') setRameshData(prev => ({ ...prev, ...data }));
+        else if (node === 'priya') setPriyaData(prev => ({ ...prev, ...data }));
+        setConnections(prev => ({ ...prev, [node]: true }));
+      } else if (type === 'COMMAND') {
+        if (portsRef.current[node]) executeSerialCommand(node, cmd);
+      } else if (type === 'STATE_SYNC') {
+        setConnections(data.connections);
+        setManualBlocks(data.manualBlocks);
+        setRameshRecharges(data.rameshRecharges);
+        setPriyaRecharges(data.priyaRecharges);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Periodically broadcast sync state
+    const interval = setInterval(() => {
+      bc.current.postMessage({ 
+        type: 'STATE_SYNC', 
+        data: { connections, manualBlocks, rameshRecharges, priyaRecharges } 
+      });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [connections, manualBlocks, rameshRecharges, priyaRecharges]);
+
+  useEffect(() => {
+    const autoReconnect = async () => {
+      try {
+        const ports = await navigator.serial.getPorts();
+        for (const port of ports) {
+          if (port.readable === null) {
+            await port.open({ baudRate: 115200 });
+            readLoop(port);
+          }
+        }
+      } catch (err) {
+        console.error("Auto-reconnect failed:", err);
+      }
+    };
+    autoReconnect();
+  }, []);
+
+  const connectNode = async () => {
     try {
       const port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
-      portsRef.current[node] = port;
-      setConnections(prev => ({ ...prev, [node]: true }));
-      readLoop(port, node);
+      readLoop(port);
     } catch (err) {
-      console.error(`Connection error for ${node}:`, err);
+      console.error("Connection error:", err);
     }
   };
 
   const disconnectNode = async (node) => {
     try {
-      if (readersRef.current[node]) await readersRef.current[node].cancel();
-      if (portsRef.current[node]) await portsRef.current[node].close();
-    } catch(err) {
-      console.error(`Disconnect error for ${node}:`, err);
-    } finally {
+      const reader = readersRef.current[node];
+      const port = portsRef.current[node];
+      if (reader) await reader.cancel();
+      if (port) await port.close();
       setConnections(prev => ({ ...prev, [node]: false }));
       portsRef.current[node] = null;
       readersRef.current[node] = null;
+    } catch(err) {
+      console.error(`Disconnect error for ${node}:`, err);
     }
   };
 
-  const readLoop = async (port, node) => {
+  const readLoop = async (port) => {
     try {
       const textDecoder = new TextDecoderStream();
       port.readable.pipeTo(textDecoder.writable);
       const reader = textDecoder.readable.getReader();
-      readersRef.current[node] = reader;
+      let detectedNode = null;
 
       let buffer = '';
       while (true) {
@@ -87,25 +127,51 @@ function App() {
             const cleanLine = line.trim();
             if (cleanLine.startsWith('{') && cleanLine.endsWith('}')) {
               const jsonData = JSON.parse(cleanLine);
-              if (node === 'gov') setGovData(jsonData);
-              else if (node === 'ramesh') setRameshData(jsonData);
-              else if (node === 'priya') setPriyaData(jsonData);
+              let nodeKey = null;
+              if (jsonData.node === 'government_uno') nodeKey = 'gov';
+              else if (jsonData.node === 'Ramesh') nodeKey = 'ramesh';
+              else if (jsonData.node === 'Priya') nodeKey = 'priya';
+
+              if (nodeKey) {
+                if (!detectedNode) {
+                  detectedNode = nodeKey;
+                  portsRef.current[nodeKey] = port;
+                  readersRef.current[nodeKey] = reader;
+                  setConnections(prev => ({ ...prev, [nodeKey]: true }));
+                }
+                if (nodeKey === 'gov') setGovData(prev => ({ ...prev, ...jsonData }));
+                else if (nodeKey === 'ramesh') setRameshData(prev => ({ ...prev, ...jsonData }));
+                else if (nodeKey === 'priya') setPriyaData(prev => ({ ...prev, ...jsonData }));
+                bc.current.postMessage({ type: 'DATA_UPDATE', node: nodeKey, data: jsonData });
+              }
             }
           } catch (e) {}
         }
       }
     } catch (err) {
-      console.error(`Read error for ${node}:`, err);
-      setConnections(prev => ({ ...prev, [node]: false }));
+      console.error("Read error:", err);
+      setConnections(prev => ({ ...prev, gov: false, ramesh: false, priya: false }));
     }
   };
 
   const sendCommand = async (node, cmd) => {
+    if (portsRef.current[node]) {
+      executeSerialCommand(node, cmd);
+    } else {
+      bc.current.postMessage({ type: 'COMMAND', node, cmd });
+    }
+  };
+
+  const executeSerialCommand = async (node, cmd) => {
     const port = portsRef.current[node];
     if (port && port.writable) {
-      const writer = port.writable.getWriter();
-      await writer.write(new TextEncoder().encode(cmd + '\n'));
-      writer.releaseLock();
+      try {
+        const writer = port.writable.getWriter();
+        await writer.write(new TextEncoder().encode(cmd + '\n'));
+        writer.releaseLock();
+      } catch (err) {
+        console.error(`Command error for ${node}:`, err);
+      }
     }
   };
 
@@ -197,7 +263,7 @@ function App() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h2 className="section-title">🏡 My Water System</h2>
         {!connections[nodeKey] ? 
-          <button onClick={() => connectNode(nodeKey)} className="btn-outline">Connect Hardware</button> :
+          <button onClick={() => connectNode()} className="btn-outline">Connect Hardware</button> :
           <button onClick={() => disconnectNode(nodeKey)} className="btn-outline" style={{ color: 'red' }}>Disconnect</button>
         }
       </div>
@@ -295,7 +361,7 @@ function App() {
       </div>
       
       {!connections.gov && (
-        <button onClick={() => connectNode('gov')} className="btn-outline" style={{ margin: '0 auto', display: 'flex', marginBottom: '2rem' }}>
+        <button onClick={() => connectNode()} className="btn-outline" style={{ margin: '0 auto', display: 'flex', marginBottom: '2rem' }}>
           <LinkIcon size={16} /> Connect Gov Node for Live Quality
         </button>
       )}
@@ -336,7 +402,7 @@ function App() {
             </div>
             
             {!connections.gov ? (
-              <button className="gov-btn-dark" onClick={() => connectNode('gov')}>
+              <button className="gov-btn-dark" onClick={() => connectNode()}>
                 <LinkIcon size={18} /> Connect Gov Node
               </button>
             ) : (
@@ -396,7 +462,7 @@ function App() {
               <div className="sm-badges">
                 <div className="sm-badge-green">₹{rameshBalance.toFixed(0)}</div>
                 {!connections.ramesh ? (
-                  <button className="sm-badge-gray" onClick={() => connectNode('ramesh')}>CONNECT</button>
+                  <button className="sm-badge-gray" onClick={() => connectNode()}>CONNECT</button>
                 ) : (
                   <button className="sm-badge-gray" onClick={() => disconnectNode('ramesh')} style={{ background: '#fee2e2', color: '#ef4444' }}>DISCONNECT</button>
                 )}
@@ -469,7 +535,7 @@ function App() {
               <div className="sm-badges">
                 <div className="sm-badge-green">₹{priyaBalance.toFixed(0)}</div>
                 {!connections.priya ? (
-                  <button className="sm-badge-gray" onClick={() => connectNode('priya')}>CONNECT</button>
+                  <button className="sm-badge-gray" onClick={() => connectNode()}>CONNECT</button>
                 ) : (
                   <button className="sm-badge-gray" onClick={() => disconnectNode('priya')} style={{ background: '#fee2e2', color: '#ef4444' }}>DISCONNECT</button>
                 )}
