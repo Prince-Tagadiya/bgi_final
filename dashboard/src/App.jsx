@@ -33,15 +33,15 @@ function App() {
   const isRameshBlocked = rameshBalance <= 0 && !rameshData.emergency;
   const isPriyaBlocked = priyaBalance <= 0 && !priyaData.emergency;
 
-  // Enforcement Effect: Ensure blocked users actually have their valves closed
+  // Enforcement Effect: Ensure blocked users actually have their valves closed (unless in SOS mode)
   useEffect(() => {
-    if (connections.ramesh && (isRameshBlocked || manualBlocks.ramesh) && rameshData.valve) {
+    if (connections.ramesh && (isRameshBlocked || manualBlocks.ramesh) && !rameshData.emergency && rameshData.valve) {
       sendCommand('ramesh', 'VALVE_OFF');
     }
-    if (connections.priya && (isPriyaBlocked || manualBlocks.priya) && priyaData.valve) {
+    if (connections.priya && (isPriyaBlocked || manualBlocks.priya) && !priyaData.emergency && priyaData.valve) {
       sendCommand('priya', 'VALVE_OFF');
     }
-  }, [isRameshBlocked, manualBlocks.ramesh, rameshData.valve, connections.ramesh, isPriyaBlocked, manualBlocks.priya, priyaData.valve, connections.priya]);
+  }, [isRameshBlocked, manualBlocks.ramesh, rameshData.valve, rameshData.emergency, connections.ramesh, isPriyaBlocked, manualBlocks.priya, priyaData.valve, priyaData.emergency, connections.priya]);
 
   // --- Cross-Tab Synchronization (BroadcastChannel) ---
   const bc = useRef(new BroadcastChannel('bgi_sync'));
