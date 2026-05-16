@@ -29,15 +29,44 @@ function App() {
   const isRameshBlocked = rameshBalance <= 0 && !rameshData.emergency;
   const isPriyaBlocked = priyaBalance <= 0 && !priyaData.emergency;
 
+  // --- Cross-Tab Synchronization (BroadcastChannel) ---
+  const bc = useRef(new BroadcastChannel('bgi_sync'));
+
+  useEffect(() => {
+    bc.current.onmessage = (event) => {
+      const { type, node, data, cmd } = event.data;
+      if (type === 'DATA_UPDATE') {
+        if (node === 'gov') setGovData(prev => ({ ...prev, ...data }));
+        else if (node === 'ramesh') setRameshData(prev => ({ ...prev, ...data }));
+        else if (node === 'priya') setPriyaData(prev => ({ ...prev, ...data }));
+        setConnections(prev => ({ ...prev, [node]: true }));
+      } else if (type === 'COMMAND') {
+        // If this tab owns the port for this node, execute the command
+        if (portsRef.current[node]) {
+          executeSerialCommand(node, cmd);
+        }
+      } else if (type === 'CONN_UPDATE') {
+        setConnections(data);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Periodically broadcast connection status
+    const interval = setInterval(() => {
+      bc.current.postMessage({ type: 'CONN_UPDATE', data: connections });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [connections]);
+
   useEffect(() => {
     // Auto-reconnect to previously authorized ports
     const autoReconnect = async () => {
       try {
         const ports = await navigator.serial.getPorts();
         for (const port of ports) {
-          if (port.readable === null) { // If not already open
+          if (port.readable === null) {
             await port.open({ baudRate: 115200 });
-            // We don't know which node this is yet, readLoop will identify it
             readLoop(port);
           }
         }
@@ -71,6 +100,7 @@ function App() {
         portsRef.current[node] = null;
       }
       setConnections(prev => ({ ...prev, [node]: false }));
+      bc.current.postMessage({ type: 'CONN_UPDATE', data: { ...connections, [node]: false } });
     } catch (err) {
       console.error(`Disconnect error for ${node}:`, err);
     }
@@ -97,7 +127,6 @@ function App() {
             if (cleanLine.startsWith('{') && cleanLine.endsWith('}')) {
               const jsonData = JSON.parse(cleanLine);
               
-              // Identify node on the fly
               let nodeKey = null;
               if (jsonData.node === 'government_uno') nodeKey = 'gov';
               else if (jsonData.node === 'Ramesh') nodeKey = 'ramesh';
@@ -111,9 +140,13 @@ function App() {
                   setConnections(prev => ({ ...prev, [nodeKey]: true }));
                 }
                 
+                // Update local state
                 if (nodeKey === 'gov') setGovData(prev => ({ ...prev, ...jsonData }));
                 else if (nodeKey === 'ramesh') setRameshData(prev => ({ ...prev, ...jsonData }));
                 else if (nodeKey === 'priya') setPriyaData(prev => ({ ...prev, ...jsonData }));
+
+                // Broadcast to other tabs
+                bc.current.postMessage({ type: 'DATA_UPDATE', node: nodeKey, data: jsonData });
               }
             }
           } catch (e) {}
@@ -121,17 +154,30 @@ function App() {
       }
     } catch (err) {
       console.error("Read error:", err);
-      // Clean up connections if error occurs
       setConnections(prev => ({ ...prev, gov: false, ramesh: false, priya: false }));
     }
   };
 
   const sendCommand = async (node, cmd) => {
+    // First, try local execution
+    if (portsRef.current[node]) {
+      executeSerialCommand(node, cmd);
+    } else {
+      // If we don't have the port, ask other tabs to send it
+      bc.current.postMessage({ type: 'COMMAND', node, cmd });
+    }
+  };
+
+  const executeSerialCommand = async (node, cmd) => {
     const port = portsRef.current[node];
     if (port && port.writable) {
-      const writer = port.writable.getWriter();
-      await writer.write(new TextEncoder().encode(cmd + '\n'));
-      writer.releaseLock();
+      try {
+        const writer = port.writable.getWriter();
+        await writer.write(new TextEncoder().encode(cmd + '\n'));
+        writer.releaseLock();
+      } catch (err) {
+        console.error(`Command error for ${node}:`, err);
+      }
     }
   };
 
