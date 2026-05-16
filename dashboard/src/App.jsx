@@ -23,9 +23,9 @@ function App() {
   const priyaLeak = connections.priya && priyaData.valve && govData.flow > 0.5 && priyaData.flow < 0.1;
   const isTheft = govData.flow > 0.5 && (rameshData.flow + priyaData.flow) < 0.1 && (!rameshData.valve || !priyaData.valve);
 
-  // Balance Management
-  const rameshBalance = 500 - (rameshData.total_flow * 2);
-  const priyaBalance = 500 - (priyaData.total_flow * 2);
+  // Balance Management (Accelerated for hackathon demo: starts at Rs 10 instead of 500)
+  const rameshBalance = 10 - (rameshData.total_flow * 2);
+  const priyaBalance = 10 - (priyaData.total_flow * 2);
   const isRameshBlocked = rameshBalance <= 0 && !rameshData.emergency;
   const isPriyaBlocked = priyaBalance <= 0 && !priyaData.emergency;
 
@@ -161,7 +161,7 @@ function App() {
           <span className="balance-label"><Droplets size={16} /> CURRENT BALANCE</span>
           <button className="recharge-btn"><Zap size={16} fill="currentColor" /> Recharge Now</button>
         </div>
-        <div className="balance-amount">₹{ (500 - consumerData.total_flow * 2).toFixed(2) }</div>
+        <div className="balance-amount">₹{ (10 - consumerData.total_flow * 2).toFixed(2) }</div>
         <div className="billing-rate">Billing Rate: ₹2/L</div>
         
         <div className="usage-stats">
@@ -226,7 +226,7 @@ function App() {
 
           <div className="sos-reserves-card">
             <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '1rem' }}>SOS EMERGENCY RESERVES</h3>
-            <div style={{ fontSize: '2rem', fontWeight: 800 }}>{(consumerData.emergency ? 5 - consumerData.flow/60 : 0).toFixed(2)} L</div>
+            <div style={{ fontSize: '2rem', fontWeight: 800 }}>{(consumerData.emergency ? 0.5 - consumerData.flow/60 : 0).toFixed(2)} L</div>
           </div>
         </div>
 
@@ -397,7 +397,7 @@ function App() {
                 <div className="sm-stat-label">
                   <span style={{ background: '#ef4444', color: 'white', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.5rem' }}>SOS</span> EMERGENCY
                 </div>
-                <div className="sm-stat-val">{(rameshData.emergency ? 5 : 0).toFixed(1)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L (₹0)</span></div>
+                <div className="sm-stat-val">{(rameshData.emergency ? 0.5 : 0).toFixed(1)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L (₹0)</span></div>
               </div>
             </div>
 
@@ -462,7 +462,7 @@ function App() {
                 <div className="sm-stat-label">
                   <span style={{ background: '#ef4444', color: 'white', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.5rem' }}>SOS</span> EMERGENCY
                 </div>
-                <div className="sm-stat-val">{(priyaData.emergency ? 5 : 0).toFixed(1)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L (₹0)</span></div>
+                <div className="sm-stat-val">{(priyaData.emergency ? 0.5 : 0).toFixed(1)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L (₹0)</span></div>
               </div>
             </div>
 

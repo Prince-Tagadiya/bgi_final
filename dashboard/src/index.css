@@ -38,7 +38,7 @@ body {
 
 /* Gov Dashboard specific styles */
 .gov-body {
-  background: linear-gradient(135deg, #e0f2fe 0%, #f8fafc 100%);
+  background: #ffffff;
   min-height: 100vh;
 }
 

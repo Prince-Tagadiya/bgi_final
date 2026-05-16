@@ -24,7 +24,7 @@ const float FLOW_CALIBRATION = 7.5; // Flow sensor calibration factor
 bool valveState = true;
 float waterLimit = 0.0; // 0 means unlimited or controlled by Gov
 bool emergencyMode = false;
-const float EMERGENCY_LIMIT = 5.0; // 5 Litres emergency water
+const float EMERGENCY_LIMIT = 0.5; // 0.5 Litres for fast demo
 
 // Tamper (MPU6050 simplified I2C reading)
 const int MPU_ADDR = 0x68;
@@ -143,8 +143,8 @@ void loop() {
       int16_t newAcY = Wire.read() << 8 | Wire.read();
       int16_t newAcZ = Wire.read() << 8 | Wire.read();
 
-      // Simple shake/tilt detection threshold
-      if (abs(newAcX - AcX) > 4000 || abs(newAcY - AcY) > 4000 || abs(newAcZ - AcZ) > 4000) {
+      // Highly sensitive shake/tilt detection for quick demo
+      if (abs(newAcX - AcX) > 2000 || abs(newAcY - AcY) > 2000 || abs(newAcZ - AcZ) > 2000) {
         isTampered = true;
         valveState = false;
         digitalWrite(RELAY_PIN, HIGH); // Auto shutoff on tamper
