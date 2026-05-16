@@ -221,6 +221,7 @@ function App() {
     }
 
     return (
+    <div className="consumer-only-page">
     <div className="app-container">
       {/* Header Profile */}
       <div className="consumer-header">
@@ -619,7 +620,9 @@ function App() {
         </div>
       </div>
     </div>
-  );
+    </div>
+    );
+  };
 
   return (
     <>

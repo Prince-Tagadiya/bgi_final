@@ -482,3 +482,117 @@ body {
 }
 
 .btn-outline:hover { background: var(--bg-main); }
+
+/* ==========================================================================
+   RESPONSIVE & MOBILE APP STYLING
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .gov-telemetry-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    padding: 1rem;
+    padding-bottom: 5rem; /* Space for bottom nav simulation if needed */
+  }
+
+  /* Consumer Dashboard Mobile Tweaks */
+  .user-name {
+    font-size: 1.5rem;
+  }
+
+  .balance-card {
+    padding: 1.5rem;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.3);
+  }
+
+  .balance-amount {
+    font-size: 2.75rem;
+  }
+
+  .usage-stats {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .usage-box {
+    max-width: none;
+    padding: 0.75rem 1rem;
+  }
+
+  .valve-control-card {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .valve-info {
+    width: 100%;
+  }
+
+  .grid-2, .city-supply-grid, .gov-telemetry-grid, .gov-consumer-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem;
+  }
+
+  .home-flow-val {
+    font-size: 2.5rem;
+  }
+
+  /* Gov Dashboard Mobile Tweaks */
+  .gov-header-card {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    align-items: flex-start;
+  }
+
+  .gov-telemetry-value {
+    font-size: 2.5rem;
+  }
+
+  .sm-stats-grid {
+    gap: 0.5rem;
+  }
+
+  .sm-stat-val {
+    font-size: 1rem;
+  }
+
+  .sm-btn-row {
+    flex-direction: column;
+  }
+}
+
+/* Force mobile app look on consumer pages specifically */
+.mobile-wrapper {
+  max-width: 500px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: white;
+  box-shadow: 0 0 50px rgba(0,0,0,0.05);
+  position: relative;
+}
+
+@media (min-width: 769px) {
+  .consumer-only-page {
+    background: #f1f5f9;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .consumer-only-page .app-container {
+    background: white;
+    width: 100%;
+    max-width: 480px;
+    min-height: 100vh;
+    box-shadow: 0 0 100px rgba(0,0,0,0.1);
+    padding: 1.5rem;
+  }
+}
