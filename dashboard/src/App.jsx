@@ -648,9 +648,7 @@ function App() {
         </div>
       </div>
     </div>
-  );</div>
-    </div>
-    );
+  );
 
   return (
     <>
