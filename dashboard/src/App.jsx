@@ -683,20 +683,41 @@ function App() {
       {/* Payment Modal Overlay */}
       {paymentModal.isOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
-          <div style={{ background: 'white', padding: '2.5rem', borderRadius: '24px', width: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }}>
-            <div style={{ background: '#e0e7ff', color: '#4f46e5', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
-              <Zap size={32} fill="currentColor" />
-            </div>
-            <h2 style={{ marginBottom: '0.5rem', fontSize: '1.5rem', fontWeight: 800 }}>Recharge Smart Meter</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.875rem' }}>Select amount to securely recharge your JAL BOARD wallet.</p>
+          <div style={{ background: 'white', padding: '2rem', borderRadius: '16px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: '#f97316' }}>⚡</span> Recharge via Razorpay
+              </h2>
+              <button onClick={() => setPaymentModal({ isOpen: false, consumer: null, amount: 100 })} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer' }}>
+                &times;
+              </button>
+            </div>
+
+            <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.25rem' }}>Current Balance</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                ₹{(paymentModal.consumer === 'ramesh' ? rameshBalance : priyaBalance).toFixed(2)}
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
               {[50, 100, 200, 500].map(amt => (
                 <button key={amt} onClick={() => setPaymentModal(prev => ({ ...prev, amount: amt }))} 
-                        style={{ padding: '1rem', borderRadius: '12px', border: paymentModal.amount === amt ? '2px solid var(--color-primary)' : '1px solid #e2e8f0', background: paymentModal.amount === amt ? '#e0e7ff' : 'white', color: paymentModal.amount === amt ? '#4f46e5' : '#0f172a', cursor: 'pointer', fontWeight: 800, fontSize: '1.125rem', transition: 'all 0.2s' }}>
+                        style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', color: '#0f172a', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem' }}>
                   ₹{amt}
                 </button>
               ))}
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <input 
+                type="number" 
+                value={paymentModal.amount || ''} 
+                onChange={(e) => setPaymentModal(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                placeholder="Enter amount (₹)" 
+                style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1.125rem', textAlign: 'center', outline: 'none', color: '#64748b' }} 
+              />
             </div>
             
             <button onClick={() => {
@@ -708,12 +729,13 @@ function App() {
                 if (isPriyaBlocked) sendCommand('priya', 'VALVE_ON');
               }
               setPaymentModal({ isOpen: false, consumer: null, amount: 100 });
-            }} style={{ background: 'var(--color-primary)', color: 'white', border: 'none', padding: '1rem', width: '100%', borderRadius: '12px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', marginBottom: '1rem', transition: 'opacity 0.2s' }}>
-              Pay ₹{paymentModal.amount} Securely
+            }} style={{ background: '#82b1ff', color: 'white', border: 'none', padding: '1rem', width: '100%', borderRadius: '12px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', marginBottom: '1.5rem' }}>
+              Pay ₹{paymentModal.amount} via Razorpay
             </button>
-            <button onClick={() => setPaymentModal({ isOpen: false, consumer: null, amount: 100 })} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem' }}>
-              Cancel
-            </button>
+            
+            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>
+              🔒 Secured by Razorpay | Simulated for Demo
+            </div>
           </div>
         </div>
       )}
