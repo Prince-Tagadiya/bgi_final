@@ -453,7 +453,10 @@ function App() {
         <div className="gov-consumer-grid">
           
           {/* Ramesh Card */}
-          <div className="smart-meter-card" style={{ border: rameshData.tamper || rameshLeak ? '2px solid #ef4444' : '1px solid #e2e8f0' }}>
+          <div className="smart-meter-card" style={{ 
+            border: rameshData.tamper || rameshLeak || rameshData.emergency ? '2px solid #ef4444' : '1px solid #e2e8f0',
+            background: rameshData.emergency ? '#fef2f2' : 'white'
+          }}>
             <div className="sm-card-top">
               <div>
                 <div className="sm-name">Ramesh Kumar (Umaria, near BGI)</div>
@@ -471,7 +474,8 @@ function App() {
 
             {rameshData.tamper && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>METER REMOVED / TAMPERED! VALVE LOCKED</div>}
             {rameshLeak && <div style={{ background: '#fef3c7', color: '#92400e', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>LEAKAGE / PIPE CUT DETECTED! (Flow Drop)</div>}
-            {isRameshBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
+            {rameshData.emergency && <div style={{ background: '#ef4444', color: 'white', padding: '0.75rem', borderRadius: '8px', fontSize: '1rem', fontWeight: 800, textAlign: 'center', marginBottom: '1rem', letterSpacing: '0.05em' }}>SOS EMERGENCY ACTIVE</div>}
+            {isRameshBlocked && !rameshData.emergency && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
 
             <div className="sm-stats-grid">
               <div>
@@ -526,7 +530,10 @@ function App() {
           </div>
 
           {/* Priya Card */}
-          <div className="smart-meter-card" style={{ border: priyaData.tamper || priyaLeak ? '2px solid #ef4444' : '1px solid #e2e8f0' }}>
+          <div className="smart-meter-card" style={{ 
+            border: priyaData.tamper || priyaLeak || priyaData.emergency ? '2px solid #ef4444' : '1px solid #e2e8f0',
+            background: priyaData.emergency ? '#fef2f2' : 'white'
+          }}>
             <div className="sm-card-top">
               <div>
                 <div className="sm-name">Priya Patel (Pigdamber, near BGI)</div>
@@ -544,7 +551,8 @@ function App() {
 
             {priyaData.tamper && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>METER REMOVED / TAMPERED! VALVE LOCKED</div>}
             {priyaLeak && <div style={{ background: '#fef3c7', color: '#92400e', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>LEAKAGE / PIPE CUT DETECTED! (Flow Drop)</div>}
-            {isPriyaBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
+            {priyaData.emergency && <div style={{ background: '#ef4444', color: 'white', padding: '0.75rem', borderRadius: '8px', fontSize: '1rem', fontWeight: 800, textAlign: 'center', marginBottom: '1rem', letterSpacing: '0.05em' }}>SOS EMERGENCY ACTIVE</div>}
+            {isPriyaBlocked && !priyaData.emergency && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
 
             <div className="sm-stats-grid">
               <div>
