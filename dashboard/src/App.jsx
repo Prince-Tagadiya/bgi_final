@@ -15,8 +15,8 @@ function App() {
   const [connections, setConnections] = useState({ gov: false, ramesh: false, priya: false });
   const [rameshRecharges, setRameshRecharges] = useState(0);
   const [priyaRecharges, setPriyaRecharges] = useState(0);
-  const [manualBlock, setManualBlock] = useState({ ramesh: false, priya: false });
   const [paymentModal, setPaymentModal] = useState({ isOpen: false, consumer: null, amount: 100 });
+  const [manualBlocks, setManualBlocks] = useState({ ramesh: false, priya: false });
   
   const portsRef = useRef({ gov: null, ramesh: null, priya: null });
   const readersRef = useRef({ gov: null, ramesh: null, priya: null });
@@ -30,8 +30,8 @@ function App() {
   // Balance Management (Accelerated for hackathon demo: starts at Rs 10 instead of 500)
   const rameshBalance = 10 + rameshRecharges - (rameshData.total_flow * 2);
   const priyaBalance = 10 + priyaRecharges - (priyaData.total_flow * 2);
-  const isRameshBlocked = (rameshBalance <= 0 && !rameshData.emergency) || manualBlock.ramesh;
-  const isPriyaBlocked = (priyaBalance <= 0 && !priyaData.emergency) || manualBlock.priya;
+  const isRameshBlocked = rameshBalance <= 0 && !rameshData.emergency;
+  const isPriyaBlocked = priyaBalance <= 0 && !priyaData.emergency;
 
   useEffect(() => {
     if (connections.ramesh && isRameshBlocked && rameshData.valve) {
@@ -109,7 +109,7 @@ function App() {
     }
   };
 
-  const renderConsumerView = (name, nodeKey, consumerData, isBlocked) => {
+  const renderConsumerView = (name, nodeKey, consumerData) => {
     let waterQualityStatus = "SENSOR ERROR";
     let waterQualityNote = "CHECK SENSORS";
     let qualityBorder = "#fef08a";
@@ -210,16 +210,26 @@ function App() {
         <button onClick={() => sendCommand(nodeKey, 'TRIGGER_SOS')} className="btn-sos">
           <AlertTriangle size={18} /> SOS
         </button>
-        <button onClick={() => {
-          if (isBlocked && !consumerData.valve) {
-            alert("ACCESS DENIED: Your water supply is administratively blocked by JAL BOARD.");
-            return;
-          }
-          sendCommand(nodeKey, consumerData.valve ? 'VALVE_OFF' : 'VALVE_ON');
-        }} 
-                className={`btn-valve ${!consumerData.valve ? 'closed' : ''}`}
-                style={{ opacity: (isBlocked && !consumerData.valve) ? 0.5 : 1, cursor: (isBlocked && !consumerData.valve) ? 'not-allowed' : 'pointer' }}>
-          {consumerData.valve ? 'CLOSE' : 'OPEN'}
+        <button 
+          onClick={() => {
+            if (nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) return;
+            if (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper)) return;
+            sendCommand(nodeKey, consumerData.valve ? 'VALVE_OFF' : 'VALVE_ON');
+          }} 
+          className={`btn-valve ${!consumerData.valve ? 'closed' : ''}`}
+          style={{ 
+            opacity: ((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+                      (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) ? 0.5 : 1, 
+            cursor: ((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+                     (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) ? 'not-allowed' : 'pointer' 
+          }}
+          disabled={((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+                     (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper)))}
+        >
+          {((nodeKey === 'ramesh' && (isRameshBlocked || manualBlocks.ramesh || consumerData.tamper)) || 
+            (nodeKey === 'priya' && (isPriyaBlocked || manualBlocks.priya || consumerData.tamper))) 
+            ? 'LOCKED BY GOV' 
+            : (consumerData.valve ? 'CLOSE' : 'OPEN')}
         </button>
       </div>
 
@@ -395,7 +405,7 @@ function App() {
 
             {rameshData.tamper && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>METER REMOVED / TAMPERED! VALVE LOCKED</div>}
             {rameshLeak && <div style={{ background: '#fef3c7', color: '#92400e', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>LEAKAGE / PIPE CUT DETECTED! (Flow Drop)</div>}
-            {isRameshBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>{manualBlock.ramesh ? 'MANUALLY BLOCKED BY ADMIN' : 'PAYMENT PENDING - VALVE AUTO BLOCKED'}</div>}
+            {isRameshBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
 
             <div className="sm-stats-grid">
               <div>
@@ -423,13 +433,21 @@ function App() {
             </div>
 
             <div className="sm-btn-row">
-              <button className="sm-btn sm-btn-block" onClick={() => { sendCommand('ramesh', 'VALVE_OFF'); setManualBlock(prev => ({ ...prev, ramesh: true })); }}>
-                <AlertOctagon size={16} /> Block User
+              <button className={`sm-btn ${manualBlocks.ramesh ? 'sm-btn-close' : 'sm-btn-block'}`} onClick={() => {
+                if (manualBlocks.ramesh) {
+                  setManualBlocks(prev => ({ ...prev, ramesh: false }));
+                  sendCommand('ramesh', 'VALVE_ON');
+                } else {
+                  setManualBlocks(prev => ({ ...prev, ramesh: true }));
+                  sendCommand('ramesh', 'VALVE_OFF');
+                }
+              }}>
+                {manualBlocks.ramesh ? 'Unblock User' : <><AlertOctagon size={16} /> Block User</>}
               </button>
               <button className="sm-btn sm-btn-sos" onClick={() => sendCommand('ramesh', 'TRIGGER_SOS')}>
                 SOS EMERGENCY
               </button>
-              <button className={`sm-btn ${rameshData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => { sendCommand('ramesh', rameshData.valve ? 'VALVE_OFF' : 'VALVE_ON'); if (!rameshData.valve) setManualBlock(prev => ({ ...prev, ramesh: false })); }}>
+              <button className={`sm-btn ${rameshData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => sendCommand('ramesh', rameshData.valve ? 'VALVE_OFF' : 'VALVE_ON')}>
                 {rameshData.valve ? 'CLOSE VALVE' : 'OPEN VALVE'}
               </button>
             </div>
@@ -460,7 +478,7 @@ function App() {
 
             {priyaData.tamper && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>METER REMOVED / TAMPERED! VALVE LOCKED</div>}
             {priyaLeak && <div style={{ background: '#fef3c7', color: '#92400e', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>LEAKAGE / PIPE CUT DETECTED! (Flow Drop)</div>}
-            {isPriyaBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>{manualBlock.priya ? 'MANUALLY BLOCKED BY ADMIN' : 'PAYMENT PENDING - VALVE AUTO BLOCKED'}</div>}
+            {isPriyaBlocked && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.5rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', marginBottom: '1rem' }}>PAYMENT PENDING - VALVE AUTO BLOCKED</div>}
 
             <div className="sm-stats-grid">
               <div>
@@ -488,13 +506,21 @@ function App() {
             </div>
 
             <div className="sm-btn-row">
-              <button className="sm-btn sm-btn-block" onClick={() => { sendCommand('priya', 'VALVE_OFF'); setManualBlock(prev => ({ ...prev, priya: true })); }}>
-                <AlertOctagon size={16} /> Block User
+              <button className={`sm-btn ${manualBlocks.priya ? 'sm-btn-close' : 'sm-btn-block'}`} onClick={() => {
+                if (manualBlocks.priya) {
+                  setManualBlocks(prev => ({ ...prev, priya: false }));
+                  sendCommand('priya', 'VALVE_ON');
+                } else {
+                  setManualBlocks(prev => ({ ...prev, priya: true }));
+                  sendCommand('priya', 'VALVE_OFF');
+                }
+              }}>
+                {manualBlocks.priya ? 'Unblock User' : <><AlertOctagon size={16} /> Block User</>}
               </button>
               <button className="sm-btn sm-btn-sos" onClick={() => sendCommand('priya', 'TRIGGER_SOS')}>
                 SOS EMERGENCY
               </button>
-              <button className={`sm-btn ${priyaData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => { sendCommand('priya', priyaData.valve ? 'VALVE_OFF' : 'VALVE_ON'); if (!priyaData.valve) setManualBlock(prev => ({ ...prev, priya: false })); }}>
+              <button className={`sm-btn ${priyaData.valve ? 'sm-btn-close' : 'sm-btn-open'}`} onClick={() => sendCommand('priya', priyaData.valve ? 'VALVE_OFF' : 'VALVE_ON')}>
                 {priyaData.valve ? 'CLOSE VALVE' : 'OPEN VALVE'}
               </button>
             </div>
@@ -515,8 +541,8 @@ function App() {
     <>
       <Routes>
       <Route path="/gov" element={renderGovView()} />
-      <Route path="/consumer/ramesh" element={renderConsumerView("Ramesh Kumar", "ramesh", rameshData, isRameshBlocked)} />
-      <Route path="/consumer/priya" element={renderConsumerView("Priya Singh", "priya", priyaData, isPriyaBlocked)} />
+      <Route path="/consumer/ramesh" element={renderConsumerView("Ramesh Kumar", "ramesh", rameshData)} />
+      <Route path="/consumer/priya" element={renderConsumerView("Priya Singh", "priya", priyaData)} />
       
       <Route path="*" element={renderGovView()} />
       </Routes>
