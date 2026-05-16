@@ -214,19 +214,19 @@ function App() {
     let noteColor = "#92400e";
 
     if (connections.gov) {
-      if (govData.tds < 300 && govData.turbidity < 3.5) {
+      if (govData.tds < 300 && govData.turbidity > 4.0) {
         waterQualityStatus = "EXCELLENT";
         waterQualityNote = "Safe for Drinking";
         qualityBorder = "#86efac"; 
         noteBg = "#dcfce7";
         noteColor = "#166534";
-      } else if (govData.tds < 600 && govData.turbidity < 4.0) {
+      } else if (govData.tds < 600 && govData.turbidity > 3.5) {
         waterQualityStatus = "GOOD";
         waterQualityNote = "Acceptable Quality";
         qualityBorder = "#7dd3fc"; 
         noteBg = "#e0f2fe";
         noteColor = "#075985";
-      } else if (govData.tds < 1000) {
+      } else if (govData.tds < 1000 && govData.turbidity > 3.0) {
         waterQualityStatus = "FAIR";
         waterQualityNote = "Needs Filtration";
         qualityBorder = "#fcd34d"; 
@@ -372,31 +372,52 @@ function App() {
             </div>
           </div>
 
-          <h2 className="section-title" style={{ marginTop: '3rem' }}>
-            🏙️ City Supply <span style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', marginLeft: '0.5rem' }}>LIVE QUALITY</span>
+          <h2 className="section-title" style={{ marginTop: '3rem', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Waves size={20} color="var(--color-primary)" /> City Supply <span style={{ fontSize: '0.65rem', background: '#dcfce7', color: '#166534', padding: '0.2rem 0.5rem', borderRadius: '4px', marginLeft: 'auto' }}>LIVE</span>
           </h2>
-          <div className="city-supply-grid">
-            <div className="quality-card">
-              <div className="quality-label">TDS LEVEL</div>
-              <div className="quality-val">{connections.gov ? govData.tds.toFixed(0) : '---'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>ppm</span></div>
-              <div className="status-chip">{connections.gov ? 'CONNECTED' : 'NOT CONNECTED'}</div>
+          
+          <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#64748b' }}>RAU PUMPING STATION</div>
+              <div style={{ fontSize: '0.75rem', color: connections.gov ? '#10b981' : '#94a3b8', fontWeight: 700 }}>{connections.gov ? '● ONLINE' : '○ OFFLINE'}</div>
             </div>
-            <div className="quality-card">
-              <div className="quality-label">TURBIDITY</div>
-              <div className="quality-val">{connections.gov ? govData.turbidity.toFixed(2) : '-.-'} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>V</span></div>
-              <div className="status-chip" style={{ 
-                background: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#dcfce7' : '#fee2e2') : 'var(--bg-main)', 
-                color: connections.gov ? (govData.waterStatus === 'Clean Water' ? '#166534' : '#991b1b') : 'inherit' 
-              }}>
-                {connections.gov ? (govData.waterStatus || (govData.turbidity > 3.5 ? 'Clean Water' : 'Dirty Water')) : 'NOT CONNECTED'}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>TDS LEVEL</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{govData.tds.toFixed(0)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ppm</span></div>
+              </div>
+              <div style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>TURBIDITY</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{govData.turbidity.toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>V</span></div>
               </div>
             </div>
-            <div className="quality-card" style={{ border: `1px solid ${qualityBorder}` }}>
-              <div className="quality-label">OVERALL QUALITY</div>
-              <div className="quality-val" style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>{waterQualityStatus}</div>
-              <div style={{ background: noteBg, color: noteColor, padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 700, alignSelf: 'flex-start', fontSize: '0.875rem' }}>{waterQualityNote}</div>
+
+            <div style={{ 
+              marginTop: '1rem', 
+              padding: '1rem', 
+              borderRadius: '12px', 
+              background: noteBg, 
+              border: `1px solid ${qualityBorder}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: noteColor, opacity: 0.8 }}>OVERALL QUALITY</div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: noteColor }}>{waterQualityStatus}</div>
+              </div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: noteColor, background: 'rgba(255,255,255,0.5)', padding: '0.25rem 0.5rem', borderRadius: '6px' }}>
+                {waterQualityNote}
+              </div>
             </div>
           </div>
+          
+          {!connections.gov && (
+            <button onClick={() => connectNode()} className="btn-outline" style={{ width: '100%', marginBottom: '2rem' }}>
+              <LinkIcon size={16} /> Sync for Quality Data
+            </button>
+          )}
         </div>
       </div>
     );
