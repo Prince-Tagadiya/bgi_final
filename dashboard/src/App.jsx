@@ -9,8 +9,8 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 
 function App() {
   const [govData, setGovData] = useState({ flow: 0, tds: 0, turbidity: 0, total_flow: 0 });
-  const [rameshData, setRameshData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, emergency_used: 0 });
-  const [priyaData, setPriyaData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, emergency_used: 0 });
+  const [rameshData, setRameshData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, sos_used: 0, sos_limit: 0.5 });
+  const [priyaData, setPriyaData] = useState({ flow: 0, total_flow: 0, valve: true, tamper: false, emergency: false, sos_used: 0, sos_limit: 0.8 });
 
   const [connections, setConnections] = useState({ gov: false, ramesh: false, priya: false });
   const [rameshRecharges, setRameshRecharges] = useState(0);
@@ -347,7 +347,10 @@ function App() {
 
           <div className="sos-reserves-card">
             <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '1rem' }}>SOS EMERGENCY RESERVES</h3>
-            <div style={{ fontSize: '2rem', fontWeight: 800 }}>{(consumerData.emergency ? 0.5 - consumerData.flow/60 : 0).toFixed(2)} L</div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{(consumerData.sos_used || 0).toFixed(2)} L / {(consumerData.sos_limit || 0.5).toFixed(1)} L</div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.8, marginTop: '0.5rem' }}>
+              Pending: {((consumerData.sos_limit || 0.5) - (consumerData.sos_used || 0)).toFixed(2)} Litres
+            </div>
           </div>
         </div>
 
@@ -523,7 +526,7 @@ function App() {
                 <div className="sm-stat-label">
                   <span style={{ background: '#ef4444', color: 'white', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.5rem' }}>SOS</span> EMERGENCY
                 </div>
-                <div className="sm-stat-val">{(rameshData.emergency ? 0.5 : 0).toFixed(1)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L (₹0)</span></div>
+                <div className="sm-stat-val">{(rameshData.sos_used || 0).toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>/ {(rameshData.sos_limit || 0.5).toFixed(1)} L</span></div>
               </div>
             </div>
 
@@ -558,6 +561,11 @@ function App() {
             {rameshData.tamper && (
               <button className="sm-btn sm-btn-block" style={{ marginTop: '1rem', width: '100%', borderColor: '#ef4444' }} onClick={() => sendCommand('ramesh', 'RESET_TAMPER')}>
                 RESET TAMPER LOCK
+              </button>
+            )}
+            {(rameshData.sos_used > 0 || rameshData.emergency) && (
+              <button className="sm-btn" style={{ marginTop: '0.5rem', width: '100%', background: '#fee2e2', color: '#ef4444', borderColor: '#fca5a5' }} onClick={() => sendCommand('ramesh', 'RESET_SOS')}>
+                RESET SOS QUOTA
               </button>
             )}
           </div>
@@ -600,7 +608,7 @@ function App() {
                 <div className="sm-stat-label">
                   <span style={{ background: '#ef4444', color: 'white', padding: '0.1rem 0.3rem', borderRadius: '4px', fontSize: '0.5rem' }}>SOS</span> EMERGENCY
                 </div>
-                <div className="sm-stat-val">{(priyaData.emergency ? 0.5 : 0).toFixed(1)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>L (₹0)</span></div>
+                <div className="sm-stat-val">{(priyaData.sos_used || 0).toFixed(2)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>/ {(priyaData.sos_limit || 0.8).toFixed(1)} L</span></div>
               </div>
             </div>
 
@@ -635,6 +643,11 @@ function App() {
             {priyaData.tamper && (
               <button className="sm-btn sm-btn-block" style={{ marginTop: '1rem', width: '100%', borderColor: '#ef4444' }} onClick={() => sendCommand('priya', 'RESET_TAMPER')}>
                 RESET TAMPER LOCK
+              </button>
+            )}
+            {(priyaData.sos_used > 0 || priyaData.emergency) && (
+              <button className="sm-btn" style={{ marginTop: '0.5rem', width: '100%', background: '#fee2e2', color: '#ef4444', borderColor: '#fca5a5' }} onClick={() => sendCommand('priya', 'RESET_SOS')}>
+                RESET SOS QUOTA
               </button>
             )}
           </div>

@@ -22,9 +22,10 @@ const float FLOW_CALIBRATION = 7.5; // Flow sensor calibration factor
 
 // Valve & Limits
 bool valveState = true;
-float waterLimit = 0.0; // 0 means unlimited or controlled by Gov
+float waterLimit = 0.0; 
 bool emergencyMode = false;
-const float EMERGENCY_LIMIT = 0.5; // 0.5 Litres for fast demo
+float sosUsed = 0.0;
+float sosLimit = 0.5; // 0.5 Litres for Ramesh demo
 
 // Tamper (MPU6050 simplified I2C reading)
 const int MPU_ADDR = 0x68;
@@ -93,20 +94,16 @@ void loop() {
       digitalWrite(RELAY_PIN, LOW);
     } else if (command == "RESET_FLOW") {
       totalLitres = 0.0;
+    } else if (command == "RESET_SOS") {
+      sosUsed = 0.0;
+      emergencyMode = false;
+      digitalWrite(EMERGENCY_LED_PIN, LOW);
     } else if (command == "TRIGGER_SOS") {
       if (isTampered) return;
-      if (emergencyMode) {
-        emergencyMode = false;
-        valveState = false;
-        digitalWrite(RELAY_PIN, HIGH);
-        digitalWrite(EMERGENCY_LED_PIN, LOW);
-      } else {
-        emergencyMode = true;
-        waterLimit = totalLitres + EMERGENCY_LIMIT;
-        valveState = true;
-        digitalWrite(RELAY_PIN, LOW);
-        digitalWrite(EMERGENCY_LED_PIN, HIGH);
-      }
+      emergencyMode = !emergencyMode;
+      valveState = emergencyMode ? true : valveState; 
+      digitalWrite(RELAY_PIN, valveState ? LOW : HIGH);
+      digitalWrite(EMERGENCY_LED_PIN, emergencyMode ? HIGH : LOW);
     }
   }
 
@@ -114,25 +111,17 @@ void loop() {
   if (digitalRead(EMERGENCY_BUTTON_PIN) == LOW && (currentTime - lastButtonPress > 1000)) {
     lastButtonPress = currentTime;
     if (isTampered) return;
-    if (emergencyMode) {
-      emergencyMode = false;
-      valveState = false;
-      digitalWrite(RELAY_PIN, HIGH);
-      digitalWrite(EMERGENCY_LED_PIN, LOW);
-    } else {
-      emergencyMode = true;
-      waterLimit = totalLitres + EMERGENCY_LIMIT;
-      valveState = true;
-      digitalWrite(RELAY_PIN, LOW);
-      digitalWrite(EMERGENCY_LED_PIN, HIGH);
-    }
+    emergencyMode = !emergencyMode;
+    valveState = emergencyMode ? true : valveState;
+    digitalWrite(RELAY_PIN, valveState ? LOW : HIGH);
+    digitalWrite(EMERGENCY_LED_PIN, emergencyMode ? HIGH : LOW);
   }
 
-  // 3. Water Limit Logic (Emergency or Gov set limit)
-  if (emergencyMode && totalLitres >= waterLimit) {
+  // 3. Water Limit Logic (Ramesh: Volume Based)
+  if (emergencyMode && sosUsed >= sosLimit) {
     emergencyMode = false;
     valveState = false;
-    digitalWrite(RELAY_PIN, HIGH); // Turn off valve
+    digitalWrite(RELAY_PIN, HIGH); 
     digitalWrite(EMERGENCY_LED_PIN, LOW);
   }
 
@@ -141,7 +130,17 @@ void loop() {
     detachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN));
     flowRate = ((1000.0 / (currentTime - oldTime)) * pulseCount) / FLOW_CALIBRATION;
     oldTime = currentTime;
-    totalLitres += (flowRate / 60.0);
+    
+    float addedLitres = (flowRate / 60.0) * ((currentTime - oldTime) / 1000.0); 
+    // Simplified: addedLitres = (flowRate / 60.0) * 0.5 because it runs every 500ms
+    addedLitres = (flowRate / 60.0) * 0.5;
+
+    if (emergencyMode) {
+      sosUsed += addedLitres;
+    } else {
+      totalLitres += addedLitres;
+    }
+    
     pulseCount = 0;
     attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING);
 
@@ -176,6 +175,8 @@ void loop() {
     doc["valve"] = valveState;
     doc["tamper"] = isTampered;
     doc["emergency"] = emergencyMode;
+    doc["sos_used"] = sosUsed;
+    doc["sos_limit"] = sosLimit;
     
     serializeJson(doc, Serial);
     Serial.println();
