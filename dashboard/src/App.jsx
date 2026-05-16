@@ -378,6 +378,7 @@ function App() {
       )}
 
     </div>
+    </div>
     );
   };
 
